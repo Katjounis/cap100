@@ -4,7 +4,7 @@
    Ces deux valeurs ne sont pas secrètes : ce sont les règles de sécurité Firestore qui protègent les données.
    Laisse-les vides pour utiliser l'application sans compte (tout reste sur l'appareil). */
 window.CAP_CLOUD = {
-  apiKey: '',
-  projectId: '',
-  adminEmail: '' // ton adresse de compte : permet de retirer une recette de la communauté (même valeur que dans firestore.rules)
+  apiKey: 'AIzaSyC3FgMLlqpiG6EFgYhIeBVnelJ38BnGyIU',
+  projectId: 'cap100-de689',
+  adminEmail: 'chaux.samuel@gmail.com'
 };
