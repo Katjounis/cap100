@@ -1,0 +1,42 @@
+rules_version = '2';
+// Cap 100 — règles de sécurité Firestore.
+// À coller dans la console Firebase : Firestore Database → Règles → Publier.
+// Remplace ADMIN_EMAIL par l'adresse de TON compte Cap 100 (celle avec laquelle tu te connectes).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && request.auth.token.email == 'ADMIN_EMAIL'; }
+
+    // Données personnelles : chacun ne lit et n'écrit que les siennes.
+    match /users/{uid}/items/{item} {
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['s', 'k', 'j', 'd', 't'])
+        && request.resource.data.s is string
+        && request.resource.data.j is string && request.resource.data.j.size() < 1000000
+        && request.resource.data.t == request.time;
+    }
+
+    // Recettes de la communauté : lisibles par tous les inscrits, modifiables par leur auteur.
+    match /community/{id} {
+      function valid() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['u', 'a', 'j', 'rid', 't'])
+          && d.u == request.auth.uid
+          && d.a is string && d.a.size() > 0 && d.a.size() <= 40
+          && d.j is string && d.j.size() < 30000
+          && d.t == request.time;
+      }
+      allow read: if signedIn();
+      allow create: if signedIn() && id.matches(request.auth.uid + '_.+') && valid();
+      allow update: if signedIn() && resource.data.u == request.auth.uid && valid();
+      allow delete: if signedIn() && (resource.data.u == request.auth.uid || isAdmin());
+    }
+
+    // Tout le reste est fermé.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
