@@ -8,6 +8,7 @@ F.quick = (date = U.today()) => {
   const items = [
     ['weight', 'Poids', 'scale', 'var(--c-weight)'],
     ['food', 'Repas', 'food', 'var(--c-food)'],
+    ['scan', 'Scanner un produit', 'barcode', 'var(--c-food)'],
     ['activity', 'Activité', 'pulse', 'var(--c-walk)'],
     ['workout', 'Séance muscu', 'dumbbell', 'var(--c-strength)'],
     ['plan', 'Programmer', 'calendar', 'var(--accent)'],
@@ -26,7 +27,7 @@ A.quickGo = el => {
   const t = UI.top(); if (t) t.close();
   const d = el.dataset.date || U.today(), k = el.dataset.k;
   setTimeout(() => ({
-    weight: () => F.weight(d), food: () => F.food({ date: d }), activity: () => F.activity({ date: d }),
+    weight: () => F.weight(d), food: () => F.food({ date: d }), scan: () => { F.food({ date: d }); setTimeout(() => A.scanOpen(), 80); }, activity: () => F.activity({ date: d }),
     workout: () => F.startWorkoutPicker(d), plan: () => F.activity({ date: d > U.today() ? d : U.addDays(U.today(), 1), status: 'planned', type: 'strength' }),
     steps: () => F.steps(d), measure: () => F.measure(d), photo: () => F.photo(d), note: () => F.note(d)
   }[k] || (() => {}))(), 60);
@@ -405,7 +406,7 @@ function basketPanel(st) {
 function foodSearchBody(st) {
   return `${slotSeg(st)}
     <div class="seg full"><button type="button" data-act="foodTab" data-t="search" class="${st.tab === 'search' ? 'on' : ''}">${U.icon('search', 'sm')} Rechercher</button><button type="button" data-act="foodTab" data-t="quick" class="${st.tab === 'quick' ? 'on' : ''}">${U.icon('bolt', 'sm')} Saisie rapide</button></div>
-    ${st.tab === 'search' ? `${basketPanel(st)}<div class="row" style="gap:8px"><div class="input-unit grow"><input class="input" id="fq" placeholder="pâtes crues, sauce tomate, poulet…" value="${U.esc(st.q)}" autocomplete="off" enterkeyhint="search"><em>${U.icon('search', 'sm')}</em></div><button type="button" class="btn scan-btn" data-act="scanOpen" title="Scanner un code-barres">${U.icon('camera', 'sm')}<span>Scanner</span></button></div><div class="food-results" id="fres">${foodResults(st)}</div>`
+    ${st.tab === 'search' ? `${basketPanel(st)}<div class="row" style="gap:8px"><div class="input-unit grow"><input class="input" id="fq" placeholder="pâtes crues, sauce tomate, poulet…" value="${U.esc(st.q)}" autocomplete="off" enterkeyhint="search"><em>${U.icon('search', 'sm')}</em></div><button type="button" class="btn primary scan-btn" data-act="scanOpen" title="Scanner un code-barres">${U.icon('barcode', 'sm')}<span>Scanner</span></button></div><div class="food-results" id="fres">${foodResults(st)}</div>`
     : `<form id="fqf" class="stack"><label class="field"><span>Nom</span><input name="name" id="fq-name" placeholder="Ex. Plat du restaurant"></label>
       <div class="fields keep"><label class="field"><span>Calories</span><div class="input-unit"><input name="kcal" id="fq-kcal" inputmode="numeric" placeholder="650"><em>kcal</em></div></label>
       <label class="field"><span>Protéines</span><div class="input-unit"><input name="p" id="fq-p" inputmode="decimal" placeholder="35"><em>g</em></div></label>
@@ -448,7 +449,8 @@ function foodQtyBody(st) {
   const base = ch ? [60, 80, 100, 125, 150] : /sauce|huile|vinaigrette|mayonnaise|ketchup|pesto|beurre|crème/i.test(f.name) ? [10, 15, 20, 30, 50, 100] : [30, 50, 100, 150, 200, 250];
   base.forEach(v => { if (v !== f.portion || !f.portionLabel) chips.push([v, `${v} g`]); });
   return `${slotSeg(st)}
-    <div><div class="eyebrow">${f.grp ? U.esc(U.cap(f.grp)) : 'Aliment'}${f.cq ? ' · Ciqual' : ''}</div><h3 style="margin:4px 0 2px;font-size:18px;line-height:1.3">${U.esc(f.name)}</h3></div>
+    <div><div class="eyebrow">${f.barcode ? `${U.icon('barcode', 'sm')} Produit scanné` : f.grp ? U.esc(U.cap(f.grp)) : 'Aliment'}${f.cq ? ' · Ciqual' : ''}</div><h3 style="margin:4px 0 2px;font-size:18px;line-height:1.3">${U.esc(f.name)}</h3>
+      ${f.barcode ? `<div class="scan-saved">${U.icon('check', 'sm')}<span>Enregistré dans <b>Mes aliments</b> avec tes autres aliments : tu le retrouves en tapant son nom, dans tes recettes, et au prochain scan sans connexion.${f.nutri ? ` Nutri-Score <b class="ns ns-${U.esc(f.nutri)}">${U.esc(f.nutri.toUpperCase())}</b>.` : ''}</span><button type="button" class="linkish" data-act="foodEditOpen" data-id="${f.id}">Corriger</button></div>` : ''}</div>
     <label class="field"><span>Quantité</span><div class="input-unit"><input class="input" id="fqty" inputmode="decimal" value="${U.num(st.qty, 0)}" style="height:56px;font:700 30px var(--display)"><em>g</em></div></label>
     <div class="chips">${chips.map(([v, l]) => `<button type="button" class="chip" data-act="foodQty" data-v="${v}">${U.esc(l)}</button>`).join('')}</div>
     <div id="flive">${foodLive(st)}</div>`;
@@ -458,7 +460,7 @@ function foodLive(st) {
   const ch = D.cookHint(st.sel);
   return `<div class="qty-live"><div><b>${U.num(m.kcal)}</b><span>kcal</span></div><div><b class="m-p">${U.num(m.p, 0)}</b><span>protéines</span></div><div><b class="m-c">${U.num(m.c, 0)}</b><span>glucides</span></div><div><b class="m-f">${U.num(m.f, 0)}</b><span>lipides</span></div></div>
     ${ch && st.qty ? `<div class="note" style="margin-top:10px">${U.icon('info', 'sm')}<span>${U.num(st.qty)} g de ${ch.what} crus ≈ <b>${U.num(Math.round(st.qty * ch.x / 5) * 5)} g une fois cuits</b>. Pèse cru pour être précis : le poids cuit varie selon la cuisson.</span></div>` : ''}
-    <details class="nutri-wrap" ${U.isMobile() ? '' : 'open'}><summary>Valeurs nutritionnelles complètes</summary>${nutriTable(st.sel, st.qty || 0)}</details>`;
+    <details class="nutri-wrap" ${U.isMobile() ? '' : 'open'}><summary>Valeurs nutritionnelles complètes</summary>${nutriTable(st.sel, st.qty || 0)}${st.sel.ingr ? `<p class="xs muted" style="margin:8px 0 0"><b>Ingrédients :</b> ${U.esc(st.sel.ingr)}</p>` : ''}</details>`;
 }
 A.foodTab = el => { const m = UI.top(); m.st.tab = el.dataset.t; m.render(); };
 A.foodSel = el => {
@@ -540,12 +542,13 @@ A.foodEditSave = async el => {
   const orig = id ? D.food(id) : null;
   let saved;
   if (orig && orig.base) saved = { ...rec, id: 'cf-' + U.uid(), overrides: orig.id };
-  else saved = { ...rec, id: id || 'cf-' + U.uid(), overrides: orig ? orig.overrides : undefined };
+  else saved = { ...(orig || {}), ...rec, id: id || 'cf-' + U.uid(), overrides: orig ? orig.overrides : undefined };
   await DB.put('foods', saved);
   UI.top().close();
   UI.toast(id ? 'Aliment mis à jour' : 'Aliment créé');
   const parent = UI.top();
   if (parent && parent.st && parent.st.basket && !parent.st.sel && parent.st.tab === 'search') { parent.st.sel = saved; parent.st.qty = saved.portion || 100; parent.render(); }
+  else if (parent && parent.st && parent.st.sel && parent.st.sel.id === saved.id) { parent.st.sel = saved; parent.render(); }
   App.changed();
 };
 A.foodDel = async el => {

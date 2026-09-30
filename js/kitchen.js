@@ -595,8 +595,9 @@ F.recipeEdit = (id, copy = false) => {
 F.ingPicker = onPick => {
   const st = { q: '' };
   const list = () => { const q = U.norm(st.q); return (q ? D.searchFoods(st.q, 60) : D.foods().filter(f => !f.cq || D.CQ_MAP[f.name]).sort((a, b) => a.name.localeCompare(b.name, 'fr'))).map(f => `<button class="food-row" data-act="ingPick" data-id="${f.id}"><span class="grow"><span class="t">${U.esc(f.name)}</span><br><span class="s">100 g : ${U.num(f.kcal)} kcal · P ${U.num(f.p, 1)} g</span></span>${U.icon('plus', 'sm')}</button>`).join('') || UI.empty('search', 'Aucun aliment', 'Crée-le depuis « Mes aliments ».'); };
-  UI.open({ title: 'Ingrédient', size: 'md', body: `<div class="input-unit"><input class="input" id="igq" placeholder="Rechercher un aliment" autocomplete="off"><em>${U.icon('search', 'sm')}</em></div><div class="food-results" id="igres">${list()}</div>`, onMount: m => { m.onPick = onPick; const q = m.el.querySelector('#igq'); q.addEventListener('input', () => { st.q = q.value; m.el.querySelector('#igres').innerHTML = list(); }); } });
+  UI.open({ title: 'Ingrédient', size: 'md', body: `<div class="row" style="gap:8px"><div class="input-unit grow"><input class="input" id="igq" placeholder="Rechercher un aliment" autocomplete="off"><em>${U.icon('search', 'sm')}</em></div><button type="button" class="btn primary scan-btn" data-act="ingScan">${U.icon('barcode', 'sm')}<span>Scanner</span></button></div><div class="food-results" id="igres">${list()}</div>`, onMount: m => { m.onPick = onPick; const q = m.el.querySelector('#igq'); q.addEventListener('input', () => { st.q = q.value; m.el.querySelector('#igres').innerHTML = list(); }); } });
 };
+A.ingScan = () => { const m = UI.top(); const cb = m.onPick; Scan.open(food => { if (!m.closed) m.close(); cb(food.id); App.changed(); }); };
 A.ingPick = el => { const m = UI.top(); const cb = m.onPick; m.close(); cb(el.dataset.id); };
 A.recipeSave = async () => {
   const m = UI.top(); m.sync(); const r = m.r;

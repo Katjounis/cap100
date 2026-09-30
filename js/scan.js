@@ -61,7 +61,7 @@ const Scan = (() => {
     if (mine) return { food: mine, known: true };
     let j;
     try {
-      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_fr,generic_name_fr,brands,quantity,serving_size,serving_quantity,nutriments`);
+      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_fr,generic_name_fr,brands,quantity,serving_size,serving_quantity,nutriments,ingredients_text_fr,ingredients_text,nutriscore_grade`);
       if (r.status === 404) return { missing: true };
       j = await r.json();
     } catch (e) { return { offline: true }; }
@@ -77,7 +77,10 @@ const Scan = (() => {
       kcal: kcal != null ? Math.round(kcal) : null, p: num('proteins_100g') ?? 0, c: num('carbohydrates_100g') ?? 0, f: num('fat_100g') ?? 0,
       sug: num('sugars_100g'), sat: num('saturated-fat_100g'), fib: num('fiber_100g'), salt: num('salt_100g'),
       portion: +p.serving_quantity > 0 ? Math.round(+p.serving_quantity) : 100, portionLabel: p.serving_size ? `1 portion (${String(p.serving_size).slice(0, 30)})` : '',
-      barcode: code, src: 'off'
+      barcode: code, src: 'off', scannedAt: new Date().toISOString(),
+      ingr: String(p.ingredients_text_fr || p.ingredients_text || '').replace(/_/g, '').replace(/\s+/g, ' ').trim().slice(0, 700) || null,
+      nutri: /^[a-e]$/.test(p.nutriscore_grade || '') ? p.nutriscore_grade : null,
+      qtyLabel: p.quantity ? String(p.quantity).slice(0, 30) : null
     };
     Object.keys(food).forEach(k => food[k] == null && k !== 'kcal' && delete food[k]);
     if (food.kcal == null) return { incomplete: food };
