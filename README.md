@@ -37,7 +37,7 @@ Les données de l'application installée et celles d'un onglet de navigateur peu
 
 ## Mettre à jour l'application
 
-Remplace les fichiers dans le dépôt puis incrémente `VERSION` dans `sw.js` (par exemple `cap100-v1.2.1`) pour que les téléphones récupèrent la nouvelle version. Tes données ne sont pas touchées.
+Remplace les fichiers dans le dépôt puis incrémente `VERSION` dans `sw.js` (par exemple `cap100-v1.4.1`) pour que les téléphones récupèrent la nouvelle version. Tes données ne sont pas touchées.
 
 ## Structure
 
@@ -55,8 +55,11 @@ js/charts.js           Graphiques SVG interactifs
 js/ui.js               Fenêtres, feuilles mobiles, toasts, confirmations
 js/forms.js            Saisies : poids, repas, activité, journée du calendrier…
 js/workout.js          Mode séance de renforcement
-js/recipes-data.js     Base de 28 recettes et ingrédients (rayons, unités d'achat)
+js/recipes-data.js     Premières recettes, ingrédients, rayons et unités d'achat
+js/recipes-more.js     Grande base de recettes (223 au total : pâtes, carbonaras, bowls, plats, gratins, soupes…) — c'est ici qu'on ajoute des recettes
 js/kitchen.js          Recettes, planning des repas, liste de courses
+js/ciqual.js           Table Ciqual 2025 (Anses) : 3 277 aliments, nutriments pour 100 g
+js/foods-db.js         Base d'aliments complète, recherche, calcul des nutriments à la quantité
 js/prices.js           Enseignes, prix de référence et budget des courses
 js/coach.js            Modèle de dépense, prévisions, charges suggérées, conseils
 js/dashboard.js …      Une page par fichier (calendar, nutrition, training, body, habits, goal, stats, settings)
@@ -87,3 +90,12 @@ La bibliothèque contient 46 exercices au poids du corps, aux haltères, au kett
 - Indices d'enseigne (E.Leclerc = 100) : classement UFC-Que Choisir 2026 pour les enseignes avec drive, étude discount 2025 pour Lidl et Aldi. Netto, Casino/Franprix et Monoprix sont estimés.
 - « À la caisse » compte les paquets entiers ; « utilisé » ne compte que les quantités de tes recettes. Les produits de longue conservation (huile, miel, whey, sauce soja…) sont comptés au prorata.
 - Touche un article de la liste pour choisir l'enseigne (pour l'article ou tout le rayon) et saisir le prix réel de l'étiquette : il remplace l'estimation pour cette enseigne.
+
+## Valeurs nutritionnelles
+
+- **Source** : table de composition nutritionnelle Ciqual 2025 de l'Anses (licence Ouverte / Etalab), intégrée à l'application : aucune requête réseau pour chercher un aliment.
+- Chaque aliment a ses valeurs pour 100 g : énergie, protéines, glucides (dont sucres), lipides (dont acides gras saturés), fibres et sel. Tape la quantité en grammes, tout est recalculé.
+- **Repas composé** : dans « Ajouter au repas », ajoute plusieurs aliments (par exemple 80 g de pâtes crues + 100 g de sauce tomate + 10 g de parmesan) avant d'enregistrer. Tu peux garder l'assiette comme recette.
+- **Cru ou cuit** : pour les pâtes, le riz, la semoule ou les légumineuses, précise « cru » ou « cuit ». Pour des pâtes pesées sèches, l'application indique le poids une fois cuites (× 2,4 environ).
+- Les recettes indiquent les féculents cuits ; le poids sec ou cru à peser est affiché à côté de chaque ingrédient et la liste de courses convertit automatiquement.
+- Quelques produits absents de Ciqual (skyr, whey, cottage cheese, edamame, tortilla complète, lait de coco léger) utilisent des valeurs d'étiquettes courantes.
