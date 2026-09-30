@@ -952,3 +952,52 @@ table.nutri tr.sub td:first-child { padding-left: 22px; color: var(--ink-3); }
 .share-row { align-items: flex-start; gap: 10px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
 .share-row .switch { flex: none; }
 .privacy p { margin: 0; line-height: 1.55; }
+
+/* ---------- Bilan de la semaine ---------- */
+.report-strip { background: linear-gradient(120deg, var(--accent-soft), var(--surface) 70%); }
+.rs-in { display: flex; align-items: center; gap: 14px; }
+.rs-kpis { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 13px; color: var(--ink-2); }
+.rs-kpis b { font: 700 18px var(--display); color: var(--ink); margin-right: 3px; }
+.habit-mini { display: flex; flex-wrap: wrap; gap: 6px; }
+.habit-mini span { font-size: 12.5px; padding: 5px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.habit-mini span.on { background: var(--good-soft, var(--surface-2)); color: var(--good); }
+.report-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.report-kpis .kpi { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.mode-seg button { gap: 6px; }
+.report-strip { position: relative; }
+.rs-in [data-act="reportHide"] { position: absolute; top: 10px; right: 10px; }
+.rs-in .grow { padding-right: 28px; }
+@media (max-width: 640px) { .rs-in { flex-wrap: wrap; } .rs-in > .ic-badge { display: none; } .rs-in > .grow { flex: 1 1 100%; } .rs-in .btn { flex: 1 1 100%; } }
+button.card-link { background: none; border: 0; cursor: pointer; font: inherit; }
+
+/* ---------- Scan de codes-barres ---------- */
+.scan-box { position: relative; aspect-ratio: 4 / 3; border-radius: 16px; overflow: hidden; background: #0b0d12; }
+.scan-box video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-frame { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.scan-frame i { width: 78%; height: 36%; border-radius: 14px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .38); border: 2.5px solid rgba(255, 255, 255, .9); position: relative; overflow: hidden; }
+.scan-frame i::after { content: ''; position: absolute; left: 6%; right: 6%; top: 50%; height: 2px; background: #ff4d5e; box-shadow: 0 0 10px #ff4d5e; animation: scanline 1.6s ease-in-out infinite alternate; }
+@keyframes scanline { from { transform: translateY(-38px); } to { transform: translateY(38px); } }
+.scan-box.found .scan-frame i { border-color: var(--good); }
+.scan-box.off { aspect-ratio: auto; min-height: 90px; }
+.scan-box.off .scan-frame { display: none; }
+.scan-msg { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; color: #fff; font-size: 13px; font-weight: 600; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); padding: 0 12px; }
+.scan-box.off .scan-msg { position: static; padding: 30px 16px; }
+.scan-btn { flex: none; height: 44px; }
+@media (max-width: 420px) { .scan-btn span { display: none; } }
+
+/* ---------- Réactions communauté ---------- */
+.react-mini { display: inline-flex; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-2); align-items: center; }
+.react-mini span { display: inline-flex; align-items: center; gap: 3px; }
+.react-mini .i { width: 13px; height: 13px; }
+.reactions { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.reactions textarea { min-height: 44px; resize: vertical; }
+.react-notes { display: flex; flex-direction: column; gap: 8px; }
+.rn { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; }
+.rn p { margin: 4px 0 0; line-height: 1.45; }
+
+/* ---------- Liste partagée ---------- */
+.share-card { margin-bottom: 16px; }
+.share-card.on { border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.share-code { font: 700 26px var(--display); letter-spacing: .12em; padding: 6px 14px; border-radius: 12px; background: var(--surface-2); user-select: all; }
+.share-note { margin-bottom: 16px; }
+.shop-by { font-weight: 500; font-size: 12px; color: var(--ink-3); }
