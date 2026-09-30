@@ -610,7 +610,7 @@ table.t tr:last-child td { border-bottom: 0; }
 table.t td.r, table.t th.r { text-align: right; }
 
 /* ---------- Modals & sheets ---------- */
-.layer { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.layer { position: fixed; inset: 0; z-index: 160; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .layer .scrim { position: absolute; inset: 0; background: var(--scrim); animation: fade .2s ease; }
 .modal {
   position: relative; width: 100%; max-width: 520px; max-height: min(88vh, 900px); display: flex; flex-direction: column; background: var(--surface);
@@ -714,6 +714,7 @@ table.t td.r, table.t th.r { text-align: right; }
   .span-6, .span-5, .span-4, .span-3 { grid-column: span 12; }
   .grid { gap: 14px; }
   .g-3, .g-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g-2 { grid-template-columns: minmax(0, 1fr); }
   .hero { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .gauge-wrap { max-width: 270px; }
   .toasts { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
@@ -936,3 +937,18 @@ table.nutri tr.sub td:first-child { padding-left: 22px; color: var(--ink-3); }
 .nut-extra b { font: 700 18px/1.1 var(--display); font-variant-numeric: tabular-nums; }
 .nut-extra small { font-size: 10.5px; color: var(--ink-3); }
 @media (max-width: 520px) { .nut-extra { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- Comptes & communauté ---------- */
+.cloud-chip { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; text-align: left; margin-bottom: 10px; transition: border-color .15s, background .15s; }
+.cloud-chip:hover { border-color: var(--accent); }
+.cloud-chip span { display: flex; flex-direction: column; min-width: 0; }
+.cloud-chip b { font-size: 12.5px; }
+.cloud-chip small { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cloud-chip.off { background: var(--accent-soft, var(--surface-2)); border-color: transparent; }
+.cloud-chip.off b { color: var(--accent); }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; margin: 0 auto 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.share-row { align-items: flex-start; gap: 10px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
+.share-row .switch { flex: none; }
+.privacy p { margin: 0; line-height: 1.55; }
