@@ -156,7 +156,7 @@ D.shopQty = it => {
 };
 
 /* ---------- Onglets de la page Alimentation ---------- */
-const NUT_TABS = [['journal', 'Journal', 'note'], ['recettes', 'Recettes', 'food'], ['planning', 'Planning', 'calendar'], ['courses', 'Courses', 'list']];
+const NUT_TABS = [['journal', 'Journal', 'note'], ['recettes', 'Recettes', 'food'], ['communaute', 'Communauté', 'smile'], ['planning', 'Planning', 'calendar'], ['courses', 'Courses', 'list']];
 const journalRender = Pages.nutrition.render, journalMount = Pages.nutrition.mount;
 Object.assign(Pages.nutrition, {
   tab: 'journal',
@@ -166,6 +166,7 @@ Object.assign(Pages.nutrition, {
     if (this.tab === 'journal') return `<div class="nutwrap">${journalRender.call(this).replace('<div class="row wrap" style="margin-bottom:16px">', tabs + '<div class="row wrap" style="margin-bottom:16px">')}</div>`;
     const head = {
       recettes: ['Recettes', 'Des idées simples et riches en protéines, calculées pour une portion. Planifie-les ou ajoute-les à ton journal en un geste.', `<button class="btn primary" data-act="recipeNew">${U.icon('plus', 'sm')}Créer une recette</button>`],
+      communaute: ['Communauté', 'Les recettes partagées par tes proches, avec leur prénom. Toute recette que tu crées y apparaît aussi (tu peux choisir de ne pas la partager).', Cloud.user ? `<button class="btn primary" data-act="recipeNew">${U.icon('plus', 'sm')}Partager une recette</button>` : ''],
       planning: ['Planning des repas', 'Organise ta semaine, vérifie qu\'elle colle à tes cibles, puis génère la liste de courses.', `<button class="btn" data-act="planShop">${U.icon('list', 'sm')}Liste de courses</button><button class="btn primary" data-act="planAuto">${U.icon('sparkle', 'sm')}Proposer ma semaine</button>`],
       courses: ['Liste de courses', 'Générée depuis ton planning, regroupée par rayon, avec les quantités à acheter (riz sec, viande crue…).', '']
     }[this.tab];
@@ -174,11 +175,16 @@ Object.assign(Pages.nutrition, {
   mount(root) {
     if (this.tab === 'journal') { journalMount.call(this, root); return; }
     if (this.tab === 'recettes') { const q = root.querySelector('#rq'); if (q) q.addEventListener('input', U.debounce(() => { this.rq = q.value; this.rshow = 24; const g = root.querySelector('#rgrid'); g.innerHTML = this.recipeGrid(); Charts.animateArcs(g); }, 120)); }
+    if (this.tab === 'communaute') {
+      const q = root.querySelector('#cq'); if (q) q.addEventListener('input', U.debounce(() => { this.cq = q.value; const g = root.querySelector('#cgrid'); const tmp = document.createElement('div'); tmp.innerHTML = Acc.tab(); g.innerHTML = tmp.querySelector('#cgrid').innerHTML; Charts.animateArcs(g); }, 150));
+      if (Cloud.user && Date.now() - (this.cfetch || 0) > 60000) { this.cfetch = Date.now(); Cloud.fetchCommunity().catch(() => {}); }
+    }
     if (this.tab === 'courses') { const f = root.querySelector('#shop-add'); if (f) f.addEventListener('submit', e => { e.preventDefault(); A.shopAdd(); }); }
   },
 
   /* ----- Recettes ----- */
   rcat: 'all', rtags: [], rsort: 'reco', rq: '',
+  tab_communaute() { return Acc.tab(); },
   tab_recettes() {
     const cats = [['all', 'Toutes'], ...D.RECIPE_CATS.map(c => [c.id, c.label]), ['fav', 'Favoris']];
     return `${this.suggestBlock()}
@@ -301,10 +307,10 @@ function recipeCard(r) {
   const m = D.recipeMacros(r), tags = D.recipeTags(r), fav = D.recipeFavs().has(r.id);
   const cat = D.RECIPE_CATS.find(c => c.id === r.cat) || D.RECIPE_CATS[0];
   return `<article class="card recipe clickable" data-act="recipeOpen" data-id="${r.id}" style="--c:${D.CAT_COLOR[r.cat]}">
-    <div class="rc-top"><span class="rc-cat">${U.icon(cat.icon, 'sm')}${cat.label}</span><span class="grow"></span><span class="xs faint">${U.icon('clock', 'sm')} ${r.time || '?'} min</span><button class="icon-btn sm rc-fav ${fav ? 'on' : ''}" data-act="recipeFav" data-id="${r.id}" aria-label="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${U.icon('star')}</button></div>
+    <div class="rc-top"><span class="rc-cat">${U.icon(cat.icon, 'sm')}${cat.label}</span><span class="grow"></span><span class="xs faint">${U.icon('clock', 'sm')} ${r.time || '?'} min</span>${r.community ? '' : `<button class="icon-btn sm rc-fav ${fav ? 'on' : ''}" data-act="recipeFav" data-id="${r.id}" aria-label="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${U.icon('star')}</button>`}</div>
     <h3>${U.esc(r.name)}</h3>
     <div class="rc-body">${macroDonut(m)}<div class="grow"><div class="rc-kcal"><b>${U.num(m.kcal)}</b> kcal <span class="faint xs">/ portion</span><span class="rc-eur">≈ ${U.eur(D.recipeCost(r).eur)}</span></div><div class="macro-line"><span class="m-p">P <b>${U.num(m.p)}</b></span><span class="m-c">G <b>${U.num(m.c)}</b></span><span class="m-f">L <b>${U.num(m.f)}</b></span></div></div></div>
-    <div class="rc-tags">${tags.slice(0, 3).map(t => `<span class="pill ${t === 'proteine' ? 'planned' : 'rest'}">${D.RECIPE_TAGS[t]}</span>`).join('')}${r.base ? '' : '<span class="pill demo">Perso</span>'}</div>
+    <div class="rc-tags">${tags.slice(0, 3).map(t => `<span class="pill ${t === 'proteine' ? 'planned' : 'rest'}">${D.RECIPE_TAGS[t]}</span>`).join('')}${r.community ? `<span class="pill planned">${U.icon('smile', 'sm')}${r.mine ? 'Toi' : U.esc(r.author)}</span>` : r.base ? '' : `<span class="pill demo">Perso</span>${r.shared && Cloud.user ? '<span class="pill planned">Partagée</span>' : ''}`}</div>
     <div class="rc-actions"><button class="btn sm" data-act="recipePlan" data-id="${r.id}">${U.icon('calendar', 'sm')}Planifier</button><button class="btn sm primary" data-act="recipeLog" data-id="${r.id}">${U.icon('plus', 'sm')}Journal</button></div>
   </article>`;
 }
@@ -333,7 +339,7 @@ A.recipeOpen = (el, e) => {
   const st = { por: 1 };
   const cat = D.RECIPE_CATS.find(c => c.id === r.cat) || {};
   UI.open({
-    title: r.name, sub: `${cat.label || ''} · ${r.time || '?'} min${r.base ? '' : ' · recette perso'}`, size: 'lg', live: true,
+    title: r.name, sub: `${cat.label || ''} · ${r.time || '?'} min${r.community ? ` · partagée par ${r.mine ? 'toi' : r.author}` : r.base ? '' : ' · recette perso'}`, size: 'lg', live: true,
     body: () => {
       const m = D.recipeMacros(r, st.por);
       return `<div class="recipe-detail">
@@ -349,7 +355,7 @@ A.recipeOpen = (el, e) => {
           <div class="rc-tags">${D.recipeTags(r).map(t => `<span class="pill ${t === 'proteine' ? 'planned' : 'rest'}">${D.RECIPE_TAGS[t]}</span>`).join('')}</div></div>
       </div>`;
     },
-    footer: () => `<button class="btn ghost" data-act="recipeFav" data-id="${r.id}">${U.icon('star', 'sm')}${D.recipeFavs().has(r.id) ? 'Favori' : 'Favoris'}</button>${r.base ? `<button class="btn ghost" data-act="recipeEdit" data-id="${r.id}" data-copy="1">${U.icon('copy', 'sm')}Dupliquer</button>` : `<button class="btn ghost" data-act="recipeEdit" data-id="${r.id}">${U.icon('edit', 'sm')}Modifier</button>`}<span class="spacer"></span><button class="btn" data-act="recipePlan" data-id="${r.id}" data-por="${st.por}">${U.icon('calendar', 'sm')}Planifier</button><button class="btn primary" data-act="recipeLog" data-id="${r.id}" data-por="${st.por}">${U.icon('plus', 'sm')}Ajouter au journal</button>`,
+    footer: () => `${r.community ? '' : `<button class="btn ghost" data-act="recipeFav" data-id="${r.id}">${U.icon('star', 'sm')}${D.recipeFavs().has(r.id) ? 'Favori' : 'Favoris'}</button>`}${r.community ? `<button class="btn ghost" data-act="recipeEdit" data-id="${r.id}" data-copy="1">${U.icon('copy', 'sm')}Copier dans mes recettes</button>${r.mine ? `<button class="btn ghost" data-act="commUnshare" data-id="${r.id}">Retirer</button>` : Cloud.isAdmin() ? `<button class="btn ghost danger" data-act="commAdminDel" data-id="${r.id}">${U.icon('trash', 'sm')}</button>` : ''}` : r.base ? `<button class="btn ghost" data-act="recipeEdit" data-id="${r.id}" data-copy="1">${U.icon('copy', 'sm')}Dupliquer</button>` : `<button class="btn ghost" data-act="recipeEdit" data-id="${r.id}">${U.icon('edit', 'sm')}Modifier</button>${Cloud.user ? r.shared ? `<button class="btn ghost" data-act="commUnshare" data-id="${r.id}" title="Retirer de la communauté">${U.icon('smile', 'sm')}Partagée ✓</button>` : `<button class="btn ghost" data-act="commShare" data-id="${r.id}">${U.icon('smile', 'sm')}Partager</button>` : ''}`}<span class="spacer"></span><button class="btn" data-act="recipePlan" data-id="${r.id}" data-por="${st.por}">${U.icon('calendar', 'sm')}Planifier</button><button class="btn primary" data-act="recipeLog" data-id="${r.id}" data-por="${st.por}">${U.icon('plus', 'sm')}Ajouter au journal</button>`,
     onMount: mm => mm.el.querySelectorAll('[data-rpor]').forEach(b => b.addEventListener('click', () => { st.por = U.clamp(st.por + +b.dataset.rpor, 0.5, 8); mm.render(); }))
   });
 };
@@ -551,6 +557,8 @@ F.recipeEdit = (id, copy = false) => {
   const r = src ? JSON.parse(JSON.stringify(src)) : { name: '', cat: 'plat', time: 20, tags: [], ing: [], pantry: [], steps: [], tip: '' };
   if (!src || copy) { r.id = 'rc-' + U.uid(); if (copy) r.name = src.name + ' (perso)'; }
   delete r.base;
+  ['community', 'author', 'authorUid', 'mine', 'rid', 'docId', 'at'].forEach(k => delete r[k]);
+  if (!src || copy) r.shared = !!Cloud.user && !(src && src.community); // une copie d'une recette de la communauté reste privée par défaut
   const t = UI.top(); if (t && t.opts.size === 'lg') t.close();
   UI.open({
     title: src && !copy ? 'Modifier la recette' : 'Nouvelle recette', sub: 'Quantités pour 1 portion', size: 'md',
@@ -564,11 +572,12 @@ F.recipeEdit = (id, copy = false) => {
       <div class="qty-live"><div><b>${U.num(m.kcal)}</b><span>kcal</span></div><div><b class="m-p">${U.num(m.p)}</b><span>protéines</span></div><div><b class="m-c">${U.num(m.c)}</b><span>glucides</span></div><div><b class="m-f">${U.num(m.f)}</b><span>lipides</span></div></div>
       <label class="field"><span>Étapes <small>(une par ligne)</small></span><textarea id="re-steps" rows="4">${U.esc((r.steps || []).join('\n'))}</textarea></label>
       <label class="field"><span>Placard <small>(épices, condiments, séparés par des virgules)</small></span><input id="re-pantry" value="${U.esc((r.pantry || []).join(', '))}"></label>
-      <label class="field"><span>Astuce</span><input id="re-tip" value="${U.esc(r.tip || '')}" placeholder="Optionnel"></label></form>`; },
+      <label class="field"><span>Astuce</span><input id="re-tip" value="${U.esc(r.tip || '')}" placeholder="Optionnel"></label>
+      ${Cloud.user ? `<label class="row small share-row"><span class="switch"><input type="checkbox" id="re-share" ${r.shared ? 'checked' : ''}><span></span></span><span><b>Partager dans la communauté</b><br><span class="muted">Visible par tous les inscrits, avec ton prénom (${U.esc(Cloud.user.name || '')}).</span></span></label>` : ''}</form>`; },
     footer: `${src && !src.base && !copy ? `<button class="btn ghost danger" data-act="recipeDel" data-id="${r.id}">${U.icon('trash')}</button><span class="spacer"></span>` : ''}<button class="btn ghost" data-close-top>Annuler</button><button class="btn primary" data-act="recipeSave">Enregistrer</button>`,
     onMount: m => {
       m.r = r;
-      const sync = () => { const g = id => m.el.querySelector(id); r.name = g('#re-name').value; r.cat = g('#re-cat').value; r.time = U.parseNum(g('#re-time').value) || null; r.steps = g('#re-steps').value.split('\n').map(s => s.trim()).filter(Boolean); r.pantry = g('#re-pantry').value.split(',').map(s => s.trim()).filter(Boolean); r.tip = g('#re-tip').value.trim(); m.el.querySelectorAll('[data-reg]').forEach(i => { r.ing[+i.dataset.reg].g = U.parseNum(i.value) || 0; }); };
+      const sync = () => { const g = id => m.el.querySelector(id); r.name = g('#re-name').value; r.cat = g('#re-cat').value; r.time = U.parseNum(g('#re-time').value) || null; r.steps = g('#re-steps').value.split('\n').map(s => s.trim()).filter(Boolean); r.pantry = g('#re-pantry').value.split(',').map(s => s.trim()).filter(Boolean); r.tip = g('#re-tip').value.trim(); if (g('#re-share')) r.shared = g('#re-share').checked; m.el.querySelectorAll('[data-reg]').forEach(i => { r.ing[+i.dataset.reg].g = U.parseNum(i.value) || 0; }); };
       m.sync = sync;
       m.el.querySelectorAll('[data-retag]').forEach(b => b.addEventListener('click', () => { sync(); const k = b.dataset.retag; r.tags = r.tags.includes(k) ? r.tags.filter(x => x !== k) : [...r.tags, k]; m.render(); }));
       m.el.querySelectorAll('[data-redel]').forEach(b => b.addEventListener('click', () => { sync(); r.ing.splice(+b.dataset.redel, 1); m.render(); }));
@@ -588,11 +597,18 @@ A.recipeSave = async () => {
   if (!r.name.trim()) { UI.toast('Donne un nom à la recette', { type: 'err' }); return; }
   if (!r.ing.length) { UI.toast('Ajoute au moins un ingrédient', { type: 'err' }); return; }
   r.v = Date.now(); r.slots = D.CAT_SLOTS[r.cat];
-  await DB.put('recipes', r); m.close(); UI.toast('Recette enregistrée'); App.changed();
+  await Acc.adoptFoods(r);
+  const was = DB.get('recipes', r.id);
+  await DB.put('recipes', r); m.close();
+  if (Cloud.user && r.shared) Cloud.publish(r);
+  else if (Cloud.user && was && was.shared) Cloud.unpublish(r.id);
+  UI.toast(Cloud.user && r.shared ? 'Recette enregistrée et partagée dans la communauté' : 'Recette enregistrée'); App.changed();
 };
 A.recipeDel = async el => {
   const ok = await UI.confirm({ title: 'Supprimer la recette ?', text: 'Elle sera aussi retirée du planning à venir.', ok: 'Supprimer', danger: true });
   if (!ok) return;
+  const was = DB.get('recipes', el.dataset.id);
+  if (was && was.shared && Cloud.user) Cloud.unpublish(was.id);
   await DB.del('recipes', el.dataset.id);
   await DB.delMany('plan', DB.all('plan').filter(e => e.recipeId === el.dataset.id && e.date >= U.today()).map(e => e.id));
   UI.closeAll(); UI.toast('Recette supprimée'); App.changed();

@@ -39,7 +39,7 @@ const App = {
     const navHtml = NAV.map(g => `<div class="nav-group">${g.group}</div>${g.items.map((it, i) => `<a class="nav-link" href="#${it.id}" data-nav="${it.id}">${U.icon(it.icon)}${it.label}</a>`).join('')}`).join('');
     document.getElementById('sidebar').innerHTML = `<div class="brand"><span class="brand-mark">100</span><div><div class="brand-name">Cap 100</div><div class="brand-sub">Transformation physique</div></div></div>
       <button class="btn primary block quick" data-act="quickOpen">${U.icon('plus', 'sm')}Ajouter<kbd style="margin-left:auto;background:transparent;color:inherit;border-color:currentColor;opacity:.6">N</kbd></button>
-      ${navHtml}<div class="sidebar-foot"><div class="mini-goal" id="mini-goal"></div>
+      ${navHtml}<div class="sidebar-foot"><div id="cloud-chip">${Acc.chip()}</div><div class="mini-goal" id="mini-goal"></div>
       <button class="btn ghost sm" data-act="cycleTheme" id="theme-btn"></button></div>`;
     document.getElementById('tabbar').innerHTML = [
       ['accueil', 'Accueil', 'home'], ['calendrier', 'Agenda', 'calendar'], null, ['repas', 'Repas', 'food'], ['sport', 'Sport', 'dumbbell']
@@ -55,6 +55,7 @@ const App = {
     const prog = D.progress();
     const mg = document.getElementById('mini-goal');
     if (mg) mg.innerHTML = `<div class="row between"><span>Vers ${U.num(prog.g.goal)} kg</span><b>${U.num(prog.pct * 100)} %</b></div>${UI.bar(prog.pct, 'var(--accent)')}<div class="xs faint" style="margin-top:6px">${U.kg(prog.ref)} kg · moyenne 7 jours</div>`;
+    const cc = document.getElementById('cloud-chip'); if (cc) cc.innerHTML = Acc.chip();
     const theme = (DB.setting('prefs', {}).theme) || 'system';
     const tb = document.getElementById('theme-btn');
     if (tb) tb.innerHTML = `${U.icon(theme === 'dark' ? 'moon' : theme === 'light' ? 'sun' : 'monitor', 'sm')}Thème : ${theme === 'dark' ? 'sombre' : theme === 'light' ? 'clair' : 'système'}`;
@@ -134,6 +135,11 @@ const App = {
       await DB.delMany('templates', ['tpl-upper', 'tpl-lower', 'tpl-full'].filter(id => DB.get('templates', id)));
       await DB.putMany('templates', D.defaultTemplates().filter(t => !DB.get('templates', t.id)));
       await DB.setSetting('exLib', 2);
+    }
+    if (Cloud.user) {
+      // Nouvel appareil : on récupère d'abord les données du compte
+      if (!D.meta().onboarded) { document.getElementById('view').innerHTML = `<div class="empty" style="margin-top:20vh"><div class="spin"></div><h3>Récupération de tes données…</h3></div>`; try { await Cloud.sync(); } catch (e) { /* hors ligne */ } }
+      else Cloud.sync().catch(() => {});
     }
     if (!D.meta().onboarded) { document.getElementById('view').innerHTML = ''; OB.start(0); return; }
     this.renderView();

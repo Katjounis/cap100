@@ -11,6 +11,7 @@ Pages.settings = {
     return `<div class="page-head"><div><h1>Réglages</h1><div class="sub">Profil, objectifs, apparence et sauvegarde de tes données.</div></div></div>
     <div class="grid g-2" style="align-items:start">
       <div class="stack" style="gap:18px">
+        ${Acc.card()}
         <section class="card"><div class="card-h"><span class="ic-badge sm">${U.icon('body')}</span><h2>Profil</h2></div>
           <form id="set-profile" class="stack"><div class="fields">
             <label class="field"><span>Prénom</span><input id="sp-name" value="${U.esc(p.name || '')}" placeholder="Optionnel"></label>
@@ -57,7 +58,7 @@ Pages.settings = {
 
         <section class="card"><div class="card-h"><span class="ic-badge sm" style="--c:var(--good)">${U.icon('shield')}</span><h2>Mes données</h2></div>
           <div class="stack">
-            <div class="note">${U.icon('lock', 'sm')}<span>Tout est enregistré <b>uniquement dans ce navigateur</b> (IndexedDB). Rien n'est envoyé sur un serveur. Conséquence : si tu effaces les données du navigateur, elles disparaissent. Exporte régulièrement une sauvegarde.</span></div>
+            ${Acc.dataNote()}
             <div class="row wrap small"><span>${DB.persistent ? `<b class="good-c">Stockage local actif</b>` : '<b class="goal-c">Stockage indisponible : données en mémoire seulement</b>'}</span><span class="faint" id="storage-est"></span><span class="grow"></span><button class="btn sm" data-act="persist" id="persist-btn">${U.icon('shield', 'sm')}Protéger le stockage</button></div>
             <div class="row wrap small"><span class="${lastExp == null || lastExp > 14 ? 'goal-c' : 'muted'}">${lastExp == null ? 'Aucune sauvegarde exportée pour l\'instant.' : lastExp === 0 ? 'Dernière sauvegarde : aujourd\'hui.' : `Dernière sauvegarde : il y a ${lastExp} jour${lastExp > 1 ? 's' : ''}.`}</span></div>
             <label class="row"><span class="switch"><input type="checkbox" id="exp-photos" checked><span></span></span><span>Inclure les photos dans l'export (${DB.all('photos').length})</span></label>
@@ -200,7 +201,8 @@ A.clearDemo = async () => {
   OB.start(1);
 };
 A.resetAll = async () => {
-  const ok = await UI.confirm({ title: 'Tout effacer ?', text: 'Poids, repas, séances, photos, réglages : tout sera supprimé de ce navigateur. <b>Cette action est définitive.</b> Exporte une sauvegarde avant si besoin.', ok: 'Tout effacer', danger: true });
+  const acc = Cloud.user;
+  const ok = await UI.confirm({ title: 'Tout effacer ?', text: acc ? 'Poids, repas, séances, réglages : tout sera supprimé <b>de ce navigateur et de ton compte</b>, donc sur tous tes appareils. Les photos de cet appareil aussi. <b>Cette action est définitive.</b> Exporte une sauvegarde avant si besoin.<br><br>Pour simplement quitter ce téléphone sans rien perdre, utilise plutôt « Se déconnecter » dans Compte.' : 'Poids, repas, séances, photos, réglages : tout sera supprimé de ce navigateur. <b>Cette action est définitive.</b> Exporte une sauvegarde avant si besoin.', ok: 'Tout effacer', danger: true });
   if (!ok) return;
   await DB.clearAll();
   UI.closeAll();
@@ -213,7 +215,9 @@ const OB = {
   ms(w, g) { const out = []; for (let m = Math.floor((w - 0.01) / 5) * 5; m > g; m -= 5) out.push(m); out.push(g); return out; },
   start(step = 0) {
     const today = U.today();
-    this.st = { step, name: '', sex: 'm', age: '', height: 185, weight: 130, startDate: today, goal: 100, goalDate: '2027-11-30', activity: 'light', pace: 'moderate', targets: null };
+    const u = typeof Cloud !== 'undefined' && Cloud.user;
+    if (u && step === 0) step = 1;
+    this.st = { step, name: u ? u.name : '', sex: 'm', age: '', height: '', weight: '', startDate: today, goal: '', goalDate: U.addDays(today, 365), activity: 'light', pace: 'moderate', targets: null };
     document.getElementById('ob').hidden = false;
     document.body.style.overflow = 'hidden';
     this.render();
@@ -226,17 +230,17 @@ const OB = {
     if (s.step === 0) h = `<div class="brand" style="padding:0"><span class="brand-mark">100</span><span class="brand-name">Cap 100</span></div>
       <h1>Ta transformation,<br><em>pas à pas.</em></h1>
       <p class="lead">Un centre de contrôle personnel pour suivre ton poids, ton alimentation, tes séances et tes habitudes, du point de départ jusqu'à ton objectif.</p>
-      <div class="ob-path"><span>130 kg</span>${U.icon('chevR', 'lg')}<span>perte de masse grasse</span>${U.icon('chevR', 'lg')}<span class="to">100 kg</span></div>
-      <div class="stack"><button class="ob-choice" data-act="obMine"><span class="ic-badge" style="--c:var(--accent)">${U.icon('flag')}</span><span class="grow"><b>Commencer avec mes données</b><span>Profil, objectif et cibles en 3 étapes rapides.</span></span>${U.icon('chevR')}</button>
+      <div class="ob-path"><span>Point de départ</span>${U.icon('chevR', 'lg')}<span>progression</span>${U.icon('chevR', 'lg')}<span class="to">objectif</span></div>
+      ${Cloud.on ? Acc.welcome() : `<div class="stack"><button class="ob-choice" data-act="obMine"><span class="ic-badge" style="--c:var(--accent)">${U.icon('flag')}</span><span class="grow"><b>Commencer avec mes données</b><span>Profil, objectif et cibles en 3 étapes rapides.</span></span>${U.icon('chevR')}</button>
         <button class="ob-choice" data-act="obDemo"><span class="ic-badge" style="--c:var(--goal)">${U.icon('sparkle')}</span><span class="grow"><b>Explorer avec des données de démo</b><span>7 semaines fictives pour découvrir l'interface. Supprimables en un clic.</span></span>${U.icon('chevR')}</button></div>
-      <div class="note">${U.icon('lock', 'sm')}<span>Tes données restent dans ce navigateur. Aucun compte, aucun serveur.</span></div>`;
+      <div class="note">${U.icon('lock', 'sm')}<span>Tes données restent dans ce navigateur. Aucun compte, aucun serveur.</span></div>`}`;
     else if (s.step === 1) h = `${steps}<h1>Ton point<br><em>de départ</em></h1><p class="lead">Ces informations servent à estimer tes besoins. Tu pourras tout modifier ensuite.</p>
       <form id="ob-f" class="stack"><div class="fields keep">
         <label class="field"><span>Prénom</span><input id="ob-name" value="${U.esc(s.name)}" placeholder="Optionnel"></label>
         <div class="field"><span>Sexe</span>${UI.pick('sex', [{ v: 'm', l: 'Homme' }, { v: 'f', l: 'Femme' }], s.sex, 'seg full')}</div>
         <label class="field"><span>Âge</span><div class="input-unit"><input id="ob-age" inputmode="numeric" value="${s.age}" placeholder="—"><em>ans</em></div></label>
-        <label class="field"><span>Taille</span><div class="input-unit"><input id="ob-height" inputmode="numeric" value="${s.height}"><em>cm</em></div></label>
-        <label class="field"><span>Poids actuel</span><div class="input-unit"><input id="ob-weight" inputmode="decimal" value="${U.num(s.weight, 1)}"><em>kg</em></div></label>
+        <label class="field"><span>Taille</span><div class="input-unit"><input id="ob-height" inputmode="numeric" value="${s.height}" placeholder="175"><em>cm</em></div></label>
+        <label class="field"><span>Poids actuel</span><div class="input-unit"><input id="ob-weight" inputmode="decimal" value="${s.weight ? U.num(s.weight, 1) : ''}" placeholder="—"><em>kg</em></div></label>
         <label class="field"><span>Date de départ</span><input type="date" id="ob-sdate" value="${s.startDate}"></label>
       </div></form>
       <div class="row"><button class="btn ghost" data-act="obBack">Retour</button><span class="grow"></span><button class="btn primary lg" data-act="obNext">Continuer</button></div>`;
@@ -279,9 +283,9 @@ const OB = {
   read() {
     const s = this.st, v = id => { const e = document.getElementById(id); return e ? e.value : null; };
     if (s.step === 1) {
-      s.name = v('ob-name').trim(); s.sex = document.querySelector('#ob-f input[name="sex"]').value; s.age = U.parseNum(v('ob-age')) || ''; s.height = U.parseNum(v('ob-height')) || 185;
-      s.weight = U.parseNum(v('ob-weight')) || 130; s.startDate = v('ob-sdate') || U.today();
-    } else if (s.step === 2) { s.goal = U.parseNum(v('ob-goal')) || 100; s.goalDate = v('ob-gdate') || s.goalDate; }
+      s.name = v('ob-name').trim(); s.sex = document.querySelector('#ob-f input[name="sex"]').value; s.age = U.parseNum(v('ob-age')) || ''; s.height = U.parseNum(v('ob-height')) || '';
+      s.weight = U.parseNum(v('ob-weight')) || ''; s.startDate = v('ob-sdate') || U.today();
+    } else if (s.step === 2) { s.goal = U.parseNum(v('ob-goal')) || s.goal; s.goalDate = v('ob-gdate') || s.goalDate; }
     else if (s.step === 3) { s.activity = v('ob-act'); s.pace = v('ob-pace'); s.targets = { kcal: U.parseNum(v('ob-kcal')), protein: U.parseNum(v('ob-p')), carbs: U.parseNum(v('ob-c')), fat: U.parseNum(v('ob-fat')) }; }
   }
 };
@@ -296,7 +300,9 @@ A.obDemo = async () => {
 A.obBack = () => { OB.read(); OB.st.step = Math.max(0, OB.st.step - 1); OB.render(); };
 A.obNext = () => {
   OB.read(); const s = OB.st;
-  if (s.step === 1 && (s.weight < 30 || s.weight > 400)) { UI.toast('Poids invalide', { type: 'err' }); return; }
+  if (s.step === 1 && !(s.weight >= 30 && s.weight <= 400)) { UI.toast('Indique ton poids actuel', { type: 'err' }); return; }
+  if (s.step === 1 && !(s.height >= 120 && s.height <= 230)) { UI.toast('Indique ta taille en cm', { type: 'err' }); return; }
+  if (s.step === 1 && (!s.goal || s.goal >= s.weight)) s.goal = Math.round(s.weight * 0.9);
   if (s.step === 2) {
     if (s.goal >= s.weight) { UI.toast('Le poids visé doit être inférieur au poids actuel', { type: 'err' }); return; }
     if (s.goalDate <= s.startDate) { UI.toast('L\'échéance doit être après la date de départ', { type: 'err' }); return; }

@@ -1,6 +1,6 @@
 'use strict';
 /* Cap 100 — stockage local IndexedDB avec cache mémoire.
-   Tout reste dans le navigateur : aucune requête réseau n'est faite avec ces données. */
+   Sans compte, tout reste dans le navigateur. Avec un compte, js/cloud.js synchronise ces données avec ton serveur Firebase. */
 
 const DB = (() => {
   const NAME = 'cap100';
@@ -28,6 +28,8 @@ const DB = (() => {
   let idb = null;
   let rev = 0;
   let onError = () => {};
+  let hook = null, silent = 0;
+  const notify = (s, keys) => { if (hook && !silent && keys.length) { try { hook(s, keys); } catch (e) { console.error(e); } } };
 
   function open() {
     return new Promise((res, rej) => {
@@ -78,24 +80,30 @@ const DB = (() => {
   const get = (s, k) => cache[s].get(k);
   function putMany(s, arr) {
     for (const o of arr) cache[s].set(key(s, o), o);
+    notify(s, arr.map(o => key(s, o)));
     return write([s], t => { const os = t.objectStore(s); for (const o of arr) os.put(o); });
   }
   const put = (s, o) => putMany(s, [o]);
   function delMany(s, keys) {
     for (const k of keys) cache[s].delete(k);
+    notify(s, keys);
     return write([s], t => { const os = t.objectStore(s); for (const k of keys) os.delete(k); });
   }
   const del = (s, k) => delMany(s, [k]);
-  function clear(s) { cache[s].clear(); return write([s], t => t.objectStore(s).clear()); }
+  function clear(s) { notify(s, [...cache[s].keys()]); cache[s].clear(); return write([s], t => t.objectStore(s).clear()); }
   function clearAll() {
-    for (const s in STORES) cache[s].clear();
+    for (const s in STORES) { notify(s, [...cache[s].keys()]); cache[s].clear(); }
     return write(Object.keys(STORES), t => { for (const s in STORES) t.objectStore(s).clear(); });
   }
   const setting = (k, def) => { const o = cache.settings.get(k); return o ? o.value : def; };
   const setSetting = (k, value) => put('settings', { key: k, value });
 
   return {
-    STORES, init, all, get, put, putMany, del, delMany, clear, clearAll, setting, setSetting,
+    STORES, init, all,
+    /* Synchronisation : écoute des changements locaux, et écriture « silencieuse » des données reçues du serveur */
+    set hook(fn) { hook = fn; },
+    quiet(fn) { silent++; try { return fn(); } finally { silent--; } }, // fn doit lancer ses écritures sans « await » intermédiaire
+    get, put, putMany, del, delMany, clear, clearAll, setting, setSetting,
     get rev() { return rev; },
     get persistent() { return !!idb; },
     set onError(fn) { onError = fn; }
