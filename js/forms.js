@@ -358,29 +358,35 @@ A.photoSave = async () => {
   m.close(); UI.toast('Photo enregistrée sur cet appareil'); App.changed();
 };
 
-/* ---------- Aliments ---------- */
+/* ---------- Aliments : recherche, quantité au gramme, repas composé ---------- */
 F.food = (opts = {}) => {
-  const st = { date: opts.date || U.today(), slot: opts.slot || F.guessSlot(), q: '', sel: null, qty: null, tab: 'search' };
+  const st = { date: opts.date || U.today(), slot: opts.slot || F.guessSlot(), q: '', sel: null, qty: null, tab: 'search', basket: [], mealName: '', asRecipe: false, editIdx: null };
   const m = UI.open({
-    title: 'Ajouter un aliment', sub: () => `${D.slotLabel(st.slot)} · ${U.relDay(st.date)}`, size: 'md',
+    title: 'Ajouter au repas', sub: () => `${D.slotLabel(st.slot)} · ${U.relDay(st.date)}`, size: 'md',
     body: () => st.sel ? foodQtyBody(st) : foodSearchBody(st),
-    footer: () => st.sel ? `<button class="btn ghost" data-act="foodBack">${U.icon('chevL', 'sm')}Retour</button><span class="spacer"></span><button class="btn" data-act="foodAdd" data-more="1">Ajouter + autre</button><button class="btn primary" data-act="foodAdd">Ajouter</button>`
-      : (st.tab === 'quick' ? `<button class="btn ghost" data-close-top>Fermer</button><button class="btn primary" data-act="foodQuickAdd">Ajouter</button>` : `<button class="btn ghost" data-act="foodCreate">${U.icon('plus', 'sm')}Créer un aliment</button><span class="spacer"></span><button class="btn ghost" data-close-top>Terminé</button>`),
+    footer: () => {
+      if (st.sel) return `<button class="btn ghost" data-act="foodBack">${U.icon('chevL', 'sm')}Retour</button><span class="spacer"></span><button class="btn" data-act="foodAdd" data-more="1">${U.icon('plus', 'sm')}${st.editIdx != null ? 'Mettre à jour' : 'Autre aliment'}</button><button class="btn primary" data-act="foodAdd">${U.icon('check', 'sm')}Valider</button>`;
+      if (st.tab === 'quick') return `<button class="btn ghost" data-close-top>Fermer</button><button class="btn primary" data-act="foodQuickAdd">Ajouter</button>`;
+      const t = D.sumNutrients(st.basket);
+      return `<button class="btn ghost" data-act="foodCreate">${U.icon('plus', 'sm')}Créer un aliment</button><span class="spacer"></span>${st.basket.length ? `<button class="btn primary" data-act="foodSave">${U.icon('check', 'sm')}Enregistrer · ${U.num(t.kcal)} kcal</button>` : '<button class="btn ghost" data-close-top>Fermer</button>'}`;
+    },
     onMount: mm => {
       mm.st = st;
       const q = mm.el.querySelector('#fq');
       if (q) {
-        q.addEventListener('input', () => { st.q = q.value; mm.el.querySelector('#fres').innerHTML = foodResults(st); });
-        q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const first = mm.el.querySelector('#fres [data-act="foodSel"]'); if (first) first.click(); } });
+        q.addEventListener('input', U.debounce(() => { st.q = q.value; mm.el.querySelector('#fres').innerHTML = foodResults(st); }, 90));
+        q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); st.q = q.value; mm.el.querySelector('#fres').innerHTML = foodResults(st); const first = mm.el.querySelector('#fres [data-act="foodSel"]'); if (first) first.click(); } });
         if (!U.isMobile()) setTimeout(() => q.focus(), 50);
       }
       const qi = mm.el.querySelector('#fqty');
       if (qi) {
         const upd = () => { st.qty = U.parseNum(qi.value) || 0; mm.el.querySelector('#flive').innerHTML = foodLive(st); };
         qi.addEventListener('input', upd);
-        qi.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); A.foodAdd({ dataset: {} }); } });
+        qi.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); A.foodAdd({ dataset: { more: '1' } }); } });
         if (!U.isMobile()) setTimeout(() => { qi.focus(); qi.select(); }, 50);
       }
+      const mn = mm.el.querySelector('#f-meal-name'); if (mn) mn.addEventListener('input', () => { st.mealName = mn.value; });
+      const ar = mm.el.querySelector('#f-as-recipe'); if (ar) ar.addEventListener('change', () => { st.asRecipe = ar.checked; });
       mm.el.querySelectorAll('[data-slotpick]').forEach(b => b.addEventListener('click', () => { st.slot = b.dataset.slotpick; mm.render(); }));
     }
   });
@@ -388,70 +394,113 @@ F.food = (opts = {}) => {
 };
 F.guessSlot = () => { const h = new Date().getHours(); return h < 10 ? 'breakfast' : h < 15 ? 'lunch' : h < 18 ? 'snack' : 'dinner'; };
 function slotSeg(st) { return `<div class="seg full">${D.SLOTS.map(s => `<button type="button" data-slotpick="${s.id}" class="${st.slot === s.id ? 'on' : ''}">${s.label}</button>`).join('')}</div>`; }
+function basketPanel(st) {
+  if (!st.basket.length) return '';
+  const t = D.sumNutrients(st.basket);
+  return `<div class="basket"><div class="row between"><b>Ton repas · ${st.basket.length} aliment${st.basket.length > 1 ? 's' : ''}</b><span class="small tabnum">${U.num(t.kcal)} kcal</span></div>
+    <div class="list">${st.basket.map((b, i) => `<div class="li" style="padding:7px 0"><button class="grow" data-act="foodBasketEdit" data-i="${i}" style="text-align:left;min-width:0"><span class="t" style="white-space:normal">${U.esc(b.name)}</span><span class="s">${U.num(b.qty)} g · P ${U.num(b.p)} · G ${U.num(b.c)} · L ${U.num(b.f)}</span></button><span class="end small"><b>${U.num(b.kcal)}</b></span><button class="icon-btn sm" data-act="foodBasketDel" data-i="${i}" aria-label="Retirer">${U.icon('x')}</button></div>`).join('')}</div>
+    <div class="macro-line"><span class="m-p">Protéines <b>${U.num(t.p, 0)} g</b></span><span class="m-c">Glucides <b>${U.num(t.c, 0)} g</b></span><span class="m-f">Lipides <b>${U.num(t.f, 0)} g</b></span>${t.fib != null ? `<span>Fibres <b>${U.num(t.fib, 1)} g</b></span>` : ''}</div>
+    ${st.basket.length > 1 ? `<div class="row wrap" style="gap:8px"><input class="input grow" id="f-meal-name" placeholder="Nom du repas (facultatif) : pâtes bolo maison…" value="${U.esc(st.mealName)}" style="height:38px;font-size:14px;min-width:180px"><label class="row small"><span class="switch"><input type="checkbox" id="f-as-recipe" ${st.asRecipe ? 'checked' : ''}><span></span></span>Garder comme recette</label></div>` : ''}</div>`;
+}
 function foodSearchBody(st) {
   return `${slotSeg(st)}
     <div class="seg full"><button type="button" data-act="foodTab" data-t="search" class="${st.tab === 'search' ? 'on' : ''}">${U.icon('search', 'sm')} Rechercher</button><button type="button" data-act="foodTab" data-t="quick" class="${st.tab === 'quick' ? 'on' : ''}">${U.icon('bolt', 'sm')} Saisie rapide</button></div>
-    ${st.tab === 'search' ? `<div class="input-unit"><input class="input" id="fq" placeholder="Poulet, riz, skyr…" value="${U.esc(st.q)}" autocomplete="off" enterkeyhint="search"><em>${U.icon('search', 'sm')}</em></div><div class="food-results" id="fres">${foodResults(st)}</div>`
+    ${st.tab === 'search' ? `${basketPanel(st)}<div class="input-unit"><input class="input" id="fq" placeholder="pâtes crues, sauce tomate, poulet…" value="${U.esc(st.q)}" autocomplete="off" enterkeyhint="search"><em>${U.icon('search', 'sm')}</em></div><div class="food-results" id="fres">${foodResults(st)}</div>`
     : `<form id="fqf" class="stack"><label class="field"><span>Nom</span><input name="name" id="fq-name" placeholder="Ex. Plat du restaurant"></label>
       <div class="fields keep"><label class="field"><span>Calories</span><div class="input-unit"><input name="kcal" id="fq-kcal" inputmode="numeric" placeholder="650"><em>kcal</em></div></label>
       <label class="field"><span>Protéines</span><div class="input-unit"><input name="p" id="fq-p" inputmode="decimal" placeholder="35"><em>g</em></div></label>
       <label class="field"><span>Glucides</span><div class="input-unit"><input name="c" id="fq-c" inputmode="decimal" placeholder="—"><em>g</em></div></label>
       <label class="field"><span>Lipides</span><div class="input-unit"><input name="f" id="fq-f" inputmode="decimal" placeholder="—"><em>g</em></div></label></div>
-      <p class="hint" style="margin:0">Pratique au restaurant ou pour un plat préparé : une estimation vaut mieux qu'une journée vide.</p></form>`}`;
+      <p class="hint" style="margin:0">Au restaurant ou chez quelqu'un : une estimation vaut mieux qu'un repas pas noté.</p></form>`}`;
 }
 function foodResults(st) {
-  const foods = D.foods();
-  const rec = D.recentFoods();
   const q = U.norm(st.q);
-  let list;
   if (!q) {
-    const recent = foods.filter(f => rec.has(f.id)).sort((a, b) => rec.get(b.id).count - rec.get(a.id).count).slice(0, 10);
-    const rest = foods.filter(f => !rec.has(f.id)).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-    return (recent.length ? `<div class="eyebrow" style="padding:6px 10px">Fréquents</div>${recent.map(foodRow).join('')}` : '') + `<div class="eyebrow" style="padding:10px 10px 6px">Tous les aliments</div>${rest.map(foodRow).join('')}`;
+    const rec = D.recentFoods();
+    const foods = D.foods();
+    const recent = foods.filter(f => rec.has(f.id)).sort((a, b) => rec.get(b.id).count - rec.get(a.id).count).slice(0, 12);
+    const mine = foods.filter(f => !f.base).slice(0, 12);
+    const ess = foods.filter(f => f.base && (!f.cq || D.CQ_MAP[f.name] || f.id.startsWith('ing-') || f.id.startsWith('base-')) && !rec.has(f.id)).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    return `<p class="hint" style="margin:4px 0 8px">Tape n'importe quel aliment : ${U.num(D.foodCount())} aliments avec toutes leurs valeurs (table Ciqual de l'Anses). Précise « cru » ou « cuit » pour les pâtes, le riz, la viande…</p>`
+      + (recent.length ? `<div class="eyebrow" style="padding:6px 10px">Fréquents</div>${recent.map(foodRow).join('')}` : '')
+      + (mine.length ? `<div class="eyebrow" style="padding:10px 10px 6px">Mes aliments</div>${mine.map(foodRow).join('')}` : '')
+      + `<div class="eyebrow" style="padding:10px 10px 6px">Essentiels</div>${ess.map(foodRow).join('')}`;
   }
-  list = foods.map(f => { const n = U.norm(f.name); const i = n.indexOf(q); return { f, s: i < 0 ? -1 : (i === 0 ? 0 : n[i - 1] === ' ' ? 1 : 2) }; }).filter(x => x.s >= 0).sort((a, b) => a.s - b.s || a.f.name.localeCompare(b.f.name, 'fr')).map(x => x.f);
-  if (!list.length) return UI.empty('search', 'Aucun aliment trouvé', `Crée « ${U.esc(st.q)} » avec ses valeurs nutritionnelles, ou utilise la saisie rapide.`, `<button class="btn primary sm" data-act="foodCreate" data-name="${U.esc(st.q)}">${U.icon('plus', 'sm')}Créer cet aliment</button>`);
-  return list.slice(0, 60).map(foodRow).join('');
+  const list = D.searchFoods(st.q, 60);
+  if (!list.length) return UI.empty('search', 'Aucun aliment trouvé', `Essaie un autre mot (« pâtes », « sauce », « poulet »), crée « ${U.esc(st.q)} » ou utilise la saisie rapide.`, `<button class="btn primary sm" data-act="foodCreate" data-name="${U.esc(st.q)}">${U.icon('plus', 'sm')}Créer cet aliment</button>`);
+  return list.map(foodRow).join('');
 }
 function foodRow(f) {
-  return `<button type="button" class="food-row" data-act="foodSel" data-id="${f.id}"><span class="grow"><span class="t">${U.esc(f.name)}${f.base ? '' : ' <span class="pill demo" style="height:18px;font-size:10px">perso</span>'}</span><br><span class="s">${f.portionLabel ? U.esc(f.portionLabel) + ' · ' : ''}${U.num(f.portion || 100)} g → ${U.num(f.kcal * (f.portion || 100) / 100)} kcal · P ${U.num(f.p * (f.portion || 100) / 100, 0)} g</span></span><span class="icon-btn sm">${U.icon('plus')}</span></button>`;
+  const por = f.portion || 100;
+  const tag = !f.base ? ' <span class="pill demo" style="height:18px;font-size:10px">perso</span>' : '';
+  const sub = f.grp ? U.cap(f.grp) : (f.portionLabel ? f.portionLabel : '');
+  return `<button type="button" class="food-row" data-act="foodSel" data-id="${f.id}"><span class="grow" style="min-width:0"><span class="t">${U.esc(f.name)}${tag}</span><br><span class="s">${sub ? U.esc(sub) + ' · ' : ''}${f.cq && !f.portionLabel ? '100 g' : U.num(por) + ' g'} : ${U.num(f.kcal * por / 100)} kcal · P ${U.num(f.p * por / 100, 0)} · G ${U.num(f.c * por / 100, 0)} · L ${U.num(f.f * por / 100, 0)}</span></span><span class="icon-btn sm">${U.icon('plus')}</span></button>`;
+}
+function nutriTable(f, qty) {
+  const m = D.macrosFor(f, qty);
+  return `<table class="t nutri"><thead><tr><th></th><th class="r">100 g</th><th class="r">${U.num(qty)} g</th></tr></thead><tbody>${D.NUTRIENTS.map(n => { const a = f[n.k], b = m[n.k]; return `<tr class="${n.sub ? 'sub' : ''}"><td>${n.l}</td><td class="r">${a == null ? '<span class="faint">–</span>' : U.num(a, n.d) + ' ' + n.u}</td><td class="r"><b>${b == null ? '–' : U.num(b, n.d) + ' ' + n.u}</b></td></tr>`; }).join('')}</tbody></table>`;
 }
 function foodQtyBody(st) {
   const f = st.sel;
   const chips = [];
-  if (f.portion) chips.push([f.portion, `${f.portionLabel || '1 portion'} · ${U.num(f.portion)} g`]);
-  if (f.portion) chips.push([f.portion * 2, `× 2`]);
-  [50, 100, 150, 200].forEach(v => { if (v !== f.portion) chips.push([v, `${v} g`]); });
+  if (f.portionLabel) chips.push([f.portion, `${f.portionLabel} · ${U.num(f.portion)} g`]);
+  const ch = D.cookHint(f);
+  const base = ch ? [60, 80, 100, 125, 150] : /sauce|huile|vinaigrette|mayonnaise|ketchup|pesto|beurre|crème/i.test(f.name) ? [10, 15, 20, 30, 50, 100] : [30, 50, 100, 150, 200, 250];
+  base.forEach(v => { if (v !== f.portion || !f.portionLabel) chips.push([v, `${v} g`]); });
   return `${slotSeg(st)}
-    <div><div class="eyebrow">Pour 100 g</div><h3 style="margin:4px 0 2px;font-size:19px">${U.esc(f.name)}</h3>
-    <div class="macro-line"><span><b>${U.num(f.kcal)}</b> kcal</span><span class="m-p">P <b>${U.num(f.p, 1)}</b> g</span><span class="m-c">G <b>${U.num(f.c, 1)}</b> g</span><span class="m-f">L <b>${U.num(f.f, 1)}</b> g</span></div></div>
+    <div><div class="eyebrow">${f.grp ? U.esc(U.cap(f.grp)) : 'Aliment'}${f.cq ? ' · Ciqual' : ''}</div><h3 style="margin:4px 0 2px;font-size:18px;line-height:1.3">${U.esc(f.name)}</h3></div>
     <label class="field"><span>Quantité</span><div class="input-unit"><input class="input" id="fqty" inputmode="decimal" value="${U.num(st.qty, 0)}" style="height:56px;font:700 30px var(--display)"><em>g</em></div></label>
     <div class="chips">${chips.map(([v, l]) => `<button type="button" class="chip" data-act="foodQty" data-v="${v}">${U.esc(l)}</button>`).join('')}</div>
-    <div class="qty-live" id="flive">${foodLive(st)}</div>`;
+    <div id="flive">${foodLive(st)}</div>`;
 }
 function foodLive(st) {
   const m = D.macrosFor(st.sel, st.qty || 0);
-  return `<div><b>${U.num(m.kcal)}</b><span>kcal</span></div><div><b class="m-p">${U.num(m.p, 0)}</b><span>protéines</span></div><div><b class="m-c">${U.num(m.c, 0)}</b><span>glucides</span></div><div><b class="m-f">${U.num(m.f, 0)}</b><span>lipides</span></div>`;
+  const ch = D.cookHint(st.sel);
+  return `<div class="qty-live"><div><b>${U.num(m.kcal)}</b><span>kcal</span></div><div><b class="m-p">${U.num(m.p, 0)}</b><span>protéines</span></div><div><b class="m-c">${U.num(m.c, 0)}</b><span>glucides</span></div><div><b class="m-f">${U.num(m.f, 0)}</b><span>lipides</span></div></div>
+    ${ch && st.qty ? `<div class="note" style="margin-top:10px">${U.icon('info', 'sm')}<span>${U.num(st.qty)} g de ${ch.what} crus ≈ <b>${U.num(Math.round(st.qty * ch.x / 5) * 5)} g une fois cuits</b>. Pèse cru pour être précis : le poids cuit varie selon la cuisson.</span></div>` : ''}
+    <details class="nutri-wrap" ${U.isMobile() ? '' : 'open'}><summary>Valeurs nutritionnelles complètes</summary>${nutriTable(st.sel, st.qty || 0)}</details>`;
 }
 A.foodTab = el => { const m = UI.top(); m.st.tab = el.dataset.t; m.render(); };
 A.foodSel = el => {
   const m = UI.top(); const f = D.food(el.dataset.id); if (!f) return;
   const rec = D.recentFoods().get(f.id);
-  m.st.sel = f; m.st.qty = rec ? rec.lastQty : (f.portion || 100);
+  const ch = D.cookHint(f);
+  m.st.sel = f; m.st.editIdx = null; m.st.qty = rec ? rec.lastQty : (f.portionLabel ? f.portion : ch ? 80 : 100);
   m.render();
 };
-A.foodBack = () => { const m = UI.top(); m.st.sel = null; m.render(); };
+A.foodBack = () => { const m = UI.top(); m.st.sel = null; m.st.editIdx = null; m.render(); };
 A.foodQty = el => { const m = UI.top(); m.st.qty = +el.dataset.v; const i = document.getElementById('fqty'); i.value = U.num(m.st.qty); m.el.querySelector('#flive').innerHTML = foodLive(m.st); };
+function basketItem(f, qty) { return { foodId: f.id, name: f.name, qty, unit: 'g', ...D.macrosFor(f, qty) }; }
 A.foodAdd = async el => {
   const m = UI.top(); const st = m.st;
   const qty = U.parseNum(document.getElementById('fqty').value);
   if (!qty || qty <= 0) { UI.toast('Indique une quantité', { type: 'err' }); return; }
-  const mac = D.macrosFor(st.sel, qty);
-  await DB.put('meals', { id: U.uid(), date: st.date, slot: st.slot, t: Date.now(), foodId: st.sel.id, name: st.sel.name, qty, unit: 'g', ...mac });
-  UI.toast(`${st.sel.name} · ${U.num(mac.kcal)} kcal ajouté`);
-  if (el.dataset && el.dataset.more) { st.sel = null; st.q = ''; m.render(); App.changed(); }
-  else { m.close(); App.changed(); }
+  const item = basketItem(st.sel, qty);
+  if (st.editIdx != null) st.basket[st.editIdx] = item; else st.basket.push(item);
+  st.sel = null; st.editIdx = null; st.q = '';
+  if (el.dataset && el.dataset.more) { m.render(); return; }
+  await saveBasket(m);
 };
+A.foodBasketDel = el => { const m = UI.top(); m.st.basket.splice(+el.dataset.i, 1); m.render(); };
+A.foodBasketEdit = el => { const m = UI.top(); const b = m.st.basket[+el.dataset.i]; const f = D.food(b.foodId); if (!f) return; m.st.sel = f; m.st.qty = b.qty; m.st.editIdx = +el.dataset.i; m.render(); };
+A.foodSave = async () => saveBasket(UI.top());
+async function saveBasket(m) {
+  const st = m.st;
+  if (!st.basket.length) { m.close(); return; }
+  const t0 = Date.now(), groupId = st.basket.length > 1 ? U.uid() : null;
+  const name = (st.mealName || '').trim();
+  const meals = st.basket.map((b, i) => ({ id: U.uid() + i, date: st.date, slot: st.slot, t: t0 + i, ...b, groupId, group: groupId && name ? name : null }));
+  await DB.putMany('meals', meals);
+  if (st.asRecipe && st.basket.length > 1) {
+    const r = { id: 'rc-' + U.uid(), name: name || `Repas du ${U.fmtShort(st.date)}`, cat: st.slot === 'breakfast' ? 'petitdej' : st.slot === 'snack' ? 'collation' : 'plat', time: null, tags: [], ing: st.basket.map(b => ({ foodId: b.foodId, g: b.qty })), pantry: [], steps: [], tip: '', v: Date.now() };
+    r.slots = D.CAT_SLOTS[r.cat];
+    await DB.put('recipes', r);
+  }
+  const t = D.sumNutrients(meals);
+  m.close();
+  UI.toast(`${meals.length > 1 ? (name || meals.length + ' aliments') : meals[0].name} · ${U.num(t.kcal)} kcal ajouté${st.asRecipe && meals.length > 1 ? ' · recette enregistrée' : ''}`, { action: { label: 'Annuler', fn: async () => { await DB.delMany('meals', meals.map(x => x.id)); App.changed(); } } });
+  App.changed();
+}
 A.foodQuickAdd = async () => {
   const m = UI.top(); const st = m.st;
   const o = UI.form(document.getElementById('fqf'));
@@ -470,6 +519,10 @@ F.foodEdit = (id, name = '') => {
       <label class="field"><span>Protéines</span><div class="input-unit"><input name="p" id="fe-p" inputmode="decimal" value="${f.p}"><em>g</em></div></label>
       <label class="field"><span>Glucides</span><div class="input-unit"><input name="c" id="fe-c" inputmode="decimal" value="${f.c}"><em>g</em></div></label>
       <label class="field"><span>Lipides</span><div class="input-unit"><input name="f" id="fe-f" inputmode="decimal" value="${f.f}"><em>g</em></div></label>
+      <label class="field"><span>dont sucres</span><div class="input-unit"><input id="fe-sug" inputmode="decimal" value="${f.sug ?? ''}" placeholder="facultatif"><em>g</em></div></label>
+      <label class="field"><span>dont AG saturés</span><div class="input-unit"><input id="fe-sat" inputmode="decimal" value="${f.sat ?? ''}" placeholder="facultatif"><em>g</em></div></label>
+      <label class="field"><span>Fibres</span><div class="input-unit"><input id="fe-fib" inputmode="decimal" value="${f.fib ?? ''}" placeholder="facultatif"><em>g</em></div></label>
+      <label class="field"><span>Sel</span><div class="input-unit"><input id="fe-salt" inputmode="decimal" value="${f.salt ?? ''}" placeholder="facultatif"><em>g</em></div></label>
       <label class="field"><span>Portion habituelle</span><div class="input-unit"><input name="portion" id="fe-por" inputmode="decimal" value="${f.portion || ''}"><em>g</em></div></label>
       <label class="field"><span>Nom de la portion</span><input name="portionLabel" id="fe-pl" value="${U.esc(f.portionLabel || '')}" placeholder="1 part"></label></div></form>`,
     footer: `${id ? `<button class="btn ghost danger" data-act="foodDel" data-id="${id}">${U.icon('trash')}</button><span class="spacer"></span>` : ''}<button class="btn ghost" data-close-top>Annuler</button><button class="btn primary" data-act="foodEditSave" data-id="${id || ''}">Enregistrer</button>`
@@ -478,7 +531,7 @@ F.foodEdit = (id, name = '') => {
 A.foodEditSave = async el => {
   const o = UI.form(document.getElementById('fef'));
   const num = k => U.parseNum(document.getElementById(k).value);
-  const rec = { name: o.name, kcal: num('fe-kcal'), p: num('fe-p') || 0, c: num('fe-c') || 0, f: num('fe-f') || 0, portion: num('fe-por') || 100, portionLabel: o.portionLabel };
+  const rec = { name: o.name, kcal: num('fe-kcal'), p: num('fe-p') || 0, c: num('fe-c') || 0, f: num('fe-f') || 0, sug: num('fe-sug'), sat: num('fe-sat'), fib: num('fe-fib'), salt: num('fe-salt'), portion: num('fe-por') || 100, portionLabel: o.portionLabel };
   if (!rec.name || rec.kcal == null) { UI.toast('Nom et calories sont nécessaires', { type: 'err' }); return; }
   const id = el.dataset.id;
   const orig = id ? D.food(id) : null;
@@ -489,7 +542,7 @@ A.foodEditSave = async el => {
   UI.top().close();
   UI.toast(id ? 'Aliment mis à jour' : 'Aliment créé');
   const parent = UI.top();
-  if (parent && parent.st && !parent.st.sel && parent.st.tab === 'search') { parent.st.sel = saved; parent.st.qty = saved.portion || 100; parent.render(); }
+  if (parent && parent.st && parent.st.basket && !parent.st.sel && parent.st.tab === 'search') { parent.st.sel = saved; parent.st.qty = saved.portion || 100; parent.render(); }
   App.changed();
 };
 A.foodDel = async el => {

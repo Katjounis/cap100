@@ -13,8 +13,8 @@ D.BASE_FOODS.find(f => f.name === 'Jus d\'orange').ml = true;
     r.ing = r.ing.map(i => { const id = byName.get(i.name); if (!id) console.warn('Ingrédient inconnu', i.name); return { foodId: id, g: i.g }; });
   }
 })();
-D.CAT_SLOTS = { wrap: ['lunch', 'dinner'], salade: ['lunch', 'dinner'], bowl: ['lunch', 'dinner'], plat: ['dinner', 'lunch'], petitdej: ['breakfast'], collation: ['snack'] };
-D.CAT_COLOR = { wrap: 'var(--c-run)', salade: 'var(--c-walk)', bowl: 'var(--c-swim)', plat: 'var(--c-strength)', petitdej: 'var(--c-food)', collation: 'var(--c-bike)' };
+D.CAT_SLOTS = { wrap: ['lunch', 'dinner'], salade: ['lunch', 'dinner'], bowl: ['lunch', 'dinner'], plat: ['dinner', 'lunch'], gratin: ['dinner', 'lunch'], pates: ['lunch', 'dinner'], soupe: ['dinner', 'lunch'], petitdej: ['breakfast'], collation: ['snack'] };
+D.CAT_COLOR = { wrap: 'var(--c-run)', salade: 'var(--c-walk)', bowl: 'var(--c-swim)', plat: 'var(--c-strength)', gratin: 'var(--c-hike)', pates: 'var(--c-pasta)', soupe: 'var(--c-weight)', petitdej: 'var(--c-food)', collation: 'var(--c-bike)' };
 
 D.recipes = () => D.memo('recipes', () => {
   const hidden = new Set(DB.setting('hiddenRecipes', []));
@@ -23,12 +23,12 @@ D.recipes = () => D.memo('recipes', () => {
 D.recipe = id => DB.get('recipes', id) || D.BASE_RECIPES.find(r => r.id === id);
 D.recipeMacros = (r, portions = 1) => {
   const calc = () => {
-    const t = { kcal: 0, p: 0, c: 0, f: 0 };
-    for (const i of r.ing) { const f = D.food(i.foodId); if (!f) continue; const m = D.macrosFor(f, i.g); t.kcal += m.kcal; t.p += m.p; t.c += m.c; t.f += m.f; }
-    return t;
+    return D.sumNutrients(r.ing.map(i => { const f = D.food(i.foodId); return f ? D.macrosFor(f, i.g) : {}; }));
   };
   const b = r.id === 'draft' ? calc() : D.memo('rm-' + r.id + '-' + (r.v || 0), calc);
-  return { kcal: Math.round(b.kcal * portions), p: +(b.p * portions).toFixed(1), c: +(b.c * portions).toFixed(1), f: +(b.f * portions).toFixed(1) };
+  const out = { kcal: Math.round(b.kcal * portions), p: +(b.p * portions).toFixed(1), c: +(b.c * portions).toFixed(1), f: +(b.f * portions).toFixed(1) };
+  for (const k of D.EXTRA_KEYS) if (b[k] != null) out[k] = +(b[k] * portions).toFixed(k === 'salt' ? 2 : 1);
+  return out;
 };
 D.recipeTags = r => {
   const m = D.recipeMacros(r);
@@ -173,7 +173,7 @@ Object.assign(Pages.nutrition, {
   },
   mount(root) {
     if (this.tab === 'journal') { journalMount.call(this, root); return; }
-    if (this.tab === 'recettes') { const q = root.querySelector('#rq'); if (q) q.addEventListener('input', U.debounce(() => { this.rq = q.value; const g = root.querySelector('#rgrid'); g.innerHTML = this.recipeGrid(); Charts.animateArcs(g); }, 120)); }
+    if (this.tab === 'recettes') { const q = root.querySelector('#rq'); if (q) q.addEventListener('input', U.debounce(() => { this.rq = q.value; this.rshow = 24; const g = root.querySelector('#rgrid'); g.innerHTML = this.recipeGrid(); Charts.animateArcs(g); }, 120)); }
     if (this.tab === 'courses') { const f = root.querySelector('#shop-add'); if (f) f.addEventListener('submit', e => { e.preventDefault(); A.shopAdd(); }); }
   },
 
@@ -191,12 +191,12 @@ Object.assign(Pages.nutrition, {
       <div class="recipe-grid" id="rgrid">${this.recipeGrid()}</div>`;
   },
   filteredRecipes() {
-    const q = U.norm(this.rq), favs = D.recipeFavs();
+    const qt = U.norm(this.rq).split(/[\s,]+/).filter(Boolean).map(t => t.length > 3 ? t.replace(/s$/, '') : t), favs = D.recipeFavs();
     let list = D.recipes().filter(r => {
       if (this.rcat === 'fav' ? !favs.has(r.id) : (this.rcat !== 'all' && r.cat !== this.rcat)) return false;
       const tags = D.recipeTags(r);
       if (this.rtags.some(t => !tags.includes(t))) return false;
-      if (q && !U.norm(r.name + ' ' + r.ing.map(i => (D.food(i.foodId) || {}).name).join(' ')).includes(q)) return false;
+      if (qt.length) { const hay = U.norm(r.name + ' ' + r.ing.map(i => (D.food(i.foodId) || {}).name).join(' ') + ' ' + ((D.RECIPE_CATS.find(c => c.id === r.cat) || {}).label || '')); if (qt.some(t => !hay.includes(t))) return false; }
       return true;
     });
     const M = r => D.recipeMacros(r);
@@ -209,7 +209,8 @@ Object.assign(Pages.nutrition, {
   recipeGrid() {
     const list = this.filteredRecipes();
     if (!list.length) return `<div class="card" style="grid-column:1/-1">${UI.empty('food', 'Aucune recette ne correspond', this.rcat === 'fav' ? 'Touche l\'étoile d\'une recette pour la retrouver ici.' : 'Retire un filtre ou crée ta propre recette.', `<button class="btn sm primary" data-act="recipeNew">Créer une recette</button>`)}</div>`;
-    return list.map(r => recipeCard(r)).join('');
+    const n = this.rshow || 24, more = list.length - n;
+    return list.slice(0, n).map(r => recipeCard(r)).join('') + (more > 0 ? `<div style="grid-column:1/-1;text-align:center"><button class="btn" data-act="rMore">${U.icon('plus', 'sm')}Voir ${Math.min(more, 24)} recettes de plus <span class="faint">(${list.length} au total)</span></button></div>` : '');
   },
   suggestBlock() {
     const today = U.today();
@@ -310,7 +311,8 @@ function recipeCard(r) {
 
 /* ---------- Actions : navigation & filtres ---------- */
 A.nutTab = el => { Pages.nutrition.tab = el.dataset.v; App.renderView(false); };
-A.rCat = el => { Pages.nutrition.rcat = el.dataset.v; App.renderView(false); };
+A.rCat = el => { Pages.nutrition.rcat = el.dataset.v; Pages.nutrition.rshow = 24; App.renderView(false); };
+A.rMore = () => { const p = Pages.nutrition; p.rshow = (p.rshow || 24) + 24; const g = document.querySelector('#rgrid'); if (g) { g.innerHTML = p.recipeGrid(); Charts.animateArcs(g); } };
 A.rTag = el => { const p = Pages.nutrition; p.rtags = p.rtags.includes(el.dataset.v) ? p.rtags.filter(t => t !== el.dataset.v) : [...p.rtags, el.dataset.v]; App.renderView(false); };
 A.rSort = el => { Pages.nutrition.rsort = el.value; App.renderView(false); };
 A.goRecipes = el => { UI.closeAll(); const p = Pages.nutrition; p.tab = 'recettes'; p.rtags = el && el.dataset.tag ? [el.dataset.tag] : []; p.rcat = el && el.dataset.cat ? el.dataset.cat : 'all'; App.go('repas'); };
@@ -336,9 +338,10 @@ A.recipeOpen = (el, e) => {
       const m = D.recipeMacros(r, st.por);
       return `<div class="recipe-detail">
         <div class="stack">
-          <div class="row wrap" style="gap:14px">${macroDonut(m, 84)}<div class="grow"><div class="rc-kcal" style="font-size:15px"><b style="font-size:34px">${U.num(m.kcal)}</b> kcal</div><div class="small muted" style="margin:2px 0 4px">≈ <b>${U.eur(D.recipeCost(r, st.por).eur)}</b> chez ${U.esc(D.store(D.mainStore()).name)} (${U.eur(D.recipeCost(r).eur)} la portion)</div><div class="macro-line" style="font-size:14px"><span class="m-p">Protéines <b>${U.num(m.p)} g</b></span><span class="m-c">Glucides <b>${U.num(m.c)} g</b></span><span class="m-f">Lipides <b>${U.num(m.f)} g</b></span></div></div></div>
+          <div class="row wrap" style="gap:14px">${macroDonut(m, 84)}<div class="grow"><div class="rc-kcal" style="font-size:15px"><b style="font-size:34px">${U.num(m.kcal)}</b> kcal</div><div class="small muted" style="margin:2px 0 4px">≈ <b>${U.eur(D.recipeCost(r, st.por).eur)}</b> chez ${U.esc(D.store(D.mainStore()).name)} (${U.eur(D.recipeCost(r).eur)} la portion)</div><div class="macro-line" style="font-size:14px"><span class="m-p">Protéines <b>${U.num(m.p)} g</b></span><span class="m-c">Glucides <b>${U.num(m.c)} g</b></span><span class="m-f">Lipides <b>${U.num(m.f)} g</b></span></div><div class="xs muted" style="margin-top:4px">Fibres ${m.fib != null ? U.num(m.fib, 1) : '–'} g · Sucres ${m.sug != null ? U.num(m.sug, 1) : '–'} g · Sel ${m.salt != null ? U.num(m.salt, 1) : '–'} g</div></div></div>
+          <details class="nutri-wrap"><summary>Valeurs nutritionnelles complètes${st.por !== 1 ? ` (${U.num(st.por, 1)} portions)` : ''}</summary><table class="t nutri"><tbody>${D.NUTRIENTS.map(n => `<tr class="${n.sub ? 'sub' : ''}"><td>${n.l}</td><td class="r"><b>${m[n.k] == null ? '–' : U.num(m[n.k], n.d) + ' ' + n.u}</b></td></tr>`).join('')}</tbody></table><p class="xs faint" style="margin:6px 0 0">Calculé ingrédient par ingrédient (table Ciqual de l'Anses).</p></details>
           <div class="row" style="gap:10px"><span class="label">Portions</span><div class="stepper" style="gap:6px"><button type="button" data-rpor="-0.5" style="width:40px;height:40px;font-size:18px" aria-label="Moins">−</button><b class="mid" style="min-width:48px;text-align:center">${U.num(st.por, st.por % 1 ? 1 : 0)}</b><button type="button" data-rpor="0.5" style="width:40px;height:40px;font-size:18px" aria-label="Plus">+</button></div></div>
-          <div><div class="eyebrow" style="margin-bottom:6px">Ingrédients</div><div class="list">${r.ing.map(i => { const f = D.food(i.foodId); return `<div class="li" style="padding:8px 0"><span class="grow"><span class="t" style="white-space:normal">${U.esc(f ? f.name : '?')}</span></span><span class="end small">${D.qtyLabel(f, Math.round(i.g * st.por))}</span></div>`; }).join('')}</div>
+          <div><div class="eyebrow" style="margin-bottom:6px">Ingrédients</div><div class="list">${r.ing.map(i => { const f = D.food(i.foodId); const raw = f && f.buy && f.buy.factor && /\(([^)]+)\)/.exec(f.buy.name); return `<div class="li" style="padding:8px 0"><span class="grow"><span class="t" style="white-space:normal">${U.esc(f ? f.name : '?')}</span></span><span class="end small" style="text-align:right">${D.qtyLabel(f, Math.round(i.g * st.por))}${raw ? `<br><span class="xs faint">soit ≈ ${U.num(Math.round(i.g * st.por * f.buy.factor / 5) * 5)} g ${U.esc(raw[1])}</span>` : ''}</span></div>`; }).join('')}</div>
             ${r.pantry && r.pantry.length ? `<p class="small muted" style="margin:8px 0 0"><b>Placard :</b> ${U.esc(r.pantry.join(', '))}</p>` : ''}</div>
         </div>
         <div class="stack"><div class="eyebrow">Préparation</div><ol class="steps">${(r.steps || []).map(s => `<li>${U.esc(s)}</li>`).join('')}</ol>
@@ -428,8 +431,8 @@ A.planPick = el => {
   const { date, slot } = el.dataset;
   const st = { q: '' };
   const list = () => {
-    const q = U.norm(st.q);
-    const arr = D.recipes().filter(r => D.recipeSlots(r).includes(slot) && (!q || U.norm(r.name).includes(q)));
+    const qt = U.norm(st.q).split(/\s+/).filter(Boolean);
+    const arr = D.recipes().filter(r => { if (!D.recipeSlots(r).includes(slot)) return false; const n = U.norm(r.name); return qt.every(t => n.includes(t)); });
     const favs = D.recipeFavs();
     arr.sort((a, b) => (favs.has(b.id) - favs.has(a.id)) || a.name.localeCompare(b.name, 'fr'));
     return arr.map(r => { const m = D.recipeMacros(r); return `<button class="food-row" data-act="planPickGo" data-id="${r.id}"><span class="ic-badge sm" style="--c:${D.CAT_COLOR[r.cat]}">${U.icon(favs.has(r.id) ? 'star' : ((D.RECIPE_CATS.find(c => c.id === r.cat) || {}).icon || 'food'))}</span><span class="grow"><span class="t">${U.esc(r.name)}</span><br><span class="s">${U.num(m.kcal)} kcal · P ${U.num(m.p)} g · ${r.time} min</span></span>${U.icon('plus', 'sm')}</button>`; }).join('') || UI.empty('food', 'Aucune recette', 'Essaie un autre mot.');
@@ -576,7 +579,7 @@ F.recipeEdit = (id, copy = false) => {
 };
 F.ingPicker = onPick => {
   const st = { q: '' };
-  const list = () => { const q = U.norm(st.q); return D.foods().filter(f => !q || U.norm(f.name).includes(q)).sort((a, b) => a.name.localeCompare(b.name, 'fr')).slice(0, 80).map(f => `<button class="food-row" data-act="ingPick" data-id="${f.id}"><span class="grow"><span class="t">${U.esc(f.name)}</span><br><span class="s">100 g : ${U.num(f.kcal)} kcal · P ${U.num(f.p, 1)} g</span></span>${U.icon('plus', 'sm')}</button>`).join('') || UI.empty('search', 'Aucun aliment', 'Crée-le depuis « Mes aliments ».'); };
+  const list = () => { const q = U.norm(st.q); return (q ? D.searchFoods(st.q, 60) : D.foods().filter(f => !f.cq || D.CQ_MAP[f.name]).sort((a, b) => a.name.localeCompare(b.name, 'fr'))).map(f => `<button class="food-row" data-act="ingPick" data-id="${f.id}"><span class="grow"><span class="t">${U.esc(f.name)}</span><br><span class="s">100 g : ${U.num(f.kcal)} kcal · P ${U.num(f.p, 1)} g</span></span>${U.icon('plus', 'sm')}</button>`).join('') || UI.empty('search', 'Aucun aliment', 'Crée-le depuis « Mes aliments ».'); };
   UI.open({ title: 'Ingrédient', size: 'md', body: `<div class="input-unit"><input class="input" id="igq" placeholder="Rechercher un aliment" autocomplete="off"><em>${U.icon('search', 'sm')}</em></div><div class="food-results" id="igres">${list()}</div>`, onMount: m => { m.onPick = onPick; const q = m.el.querySelector('#igq'); q.addEventListener('input', () => { st.q = q.value; m.el.querySelector('#igres').innerHTML = list(); }); } });
 };
 A.ingPick = el => { const m = UI.top(); const cb = m.onPick; m.close(); cb(el.dataset.id); };

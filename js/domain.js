@@ -367,7 +367,7 @@ D.mealIndex = () => D.memo('mealIdx', () => {
 D.mealsOn = date => D.mealIndex().get(date) || [];
 D.dayTotals = date => {
   const arr = D.mealsOn(date);
-  return { kcal: U.sum(arr.map(m => m.kcal)), p: U.sum(arr.map(m => m.p)), c: U.sum(arr.map(m => m.c)), f: U.sum(arr.map(m => m.f)), count: arr.length };
+  return { ...D.sumNutrients(arr), count: arr.length };
 };
 D.foods = () => D.memo('foods', () => {
   const custom = DB.all('foods');

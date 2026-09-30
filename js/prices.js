@@ -37,8 +37,12 @@ D.PRICE_REF = {
   'Parmesan': [25, 100, true], 'Yaourt nature 0 %': [2, 500], 'Crème légère 15 %': [5, 200], 'Cottage cheese': [7, 200],
   'Blanc de dinde (tranches)': [16, 160], 'Concombre': [3, 300], 'Poivron': [4, 0], 'Oignon rouge': [3, 0], 'Épinards frais': [8, 250],
   'Champignons de Paris': [5, 250], 'Citron (jus)': [10, 40], 'Chou rouge': [2, 0], 'Fruits rouges surgelés': [7, 500], 'Edamame surgelés': [8, 400],
-  'Semoule cuite': [2, 1000], 'Houmous': [10, 200], 'Pesto': [12, 190], 'Sauce soja': [6, 0, true], 'Moutarde': [5, 0, true]
+  'Semoule cuite': [2, 1000], 'Aubergine': [3.5, 0], 'Poireau': [3, 0], 'Chou-fleur': [3, 0], 'Courge butternut': [2.5, 0], 'Betterave cuite': [4, 250],
+  'Escalope de dinde cuite': [12, 500], 'Filet mignon de porc cuit': [14, 500], 'Saumon fumé': [30, 120], 'Surimi': [8, 250], 'Fromage frais allégé': [10, 150],
+  'Ricotta': [10, 250], 'Bûche de chèvre': [13, 180], 'Pain pita': [6, 420], 'Boulgour cuit': [3, 500], 'Nouilles de riz cuites': [6, 400],
+  'Olives noires': [12, 150], 'Lait de coco léger': [7, 200], 'Cerneaux de noix': [20, 125], 'Houmous': [10, 200], 'Pesto': [12, 190], 'Sauce soja': [6, 0, true], 'Moutarde': [5, 0, true]
 };
+Object.assign(D.PRICE_REF, D.MORE_PRICES || {});
 (() => { for (const f of D.BASE_FOODS) { const r = D.PRICE_REF[f.name]; if (r) { f.price = r[0]; f.pack = r[1] || 0; f.stock = !!r[2]; } } })();
 
 /* Prix au kg pour une enseigne : prix saisi par toi, sinon référence × indice */
