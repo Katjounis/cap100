@@ -170,7 +170,7 @@ D.insights = () => D.memo('insights', () => {
   if (sinceStart >= 3 && logged.length < 4) add('info', 'note', 'Note tes repas plus souvent', `Seulement ${logged.length} jour${logged.length > 1 ? 's' : ''} notés sur les 7 derniers. À partir de 4 à 5 jours par semaine, les prévisions deviennent fiables.`, { label: 'Ouvrir le journal', act: 'goToday' }, 20);
   if (logged.length >= 3) {
     const pAvg = U.avg(logged.map(d => D.dayTotals(d).p)), kAvg = U.avg(logged.map(d => D.dayTotals(d).kcal));
-    if (pAvg < tg.protein * 0.85) add('warn', 'bolt', 'Protéines un peu justes', `${U.num(pAvg)} g par jour en moyenne pour une cible de ${U.num(tg.protein)} g. En perte de poids, c'est ce qui aide le plus à garder tes muscles et ta carrure.`, { label: 'Recettes riches en protéines', act: 'goRecipes', data: { tag: 'proteine' } }, 30);
+    if (pAvg < tg.protein * 0.85) add('warn', 'bolt', 'Protéines un peu justes', `${U.num(pAvg)} g par jour en moyenne pour une cible de ${U.num(tg.protein)} g. ${D.isMaintain() ? 'Elles aident à récupérer après l\'effort et à garder tes muscles.' : 'En perte de poids, c\'est ce qui aide le plus à garder tes muscles et ta carrure.'}`, { label: 'Recettes riches en protéines', act: 'goRecipes', data: { tag: 'proteine' } }, 30);
     else if (pAvg >= tg.protein * 0.95) add('good', 'bolt', 'Protéines au rendez-vous', `${U.num(pAvg)} g par jour en moyenne cette semaine : exactement ce qu'il faut pour préserver la masse musculaire.`);
     const bmr = D.bmr(w);
     if (kAvg < bmr * 0.95) add('warn', 'flame', 'Tu manges peut-être trop peu', `Moyenne de ${U.num(kAvg)} kcal, sous ton métabolisme de base estimé (${U.num(bmr)} kcal). Si tes repas sont bien tous notés, une restriction aussi forte fait perdre du muscle et se tient mal dans la durée.`, { label: 'Voir mes cibles', act: 'goSettings' }, 40);
@@ -182,9 +182,15 @@ D.insights = () => D.memo('insights', () => {
     const a = U.avg(we.map(d => D.dayTotals(d).kcal)), b = U.avg(wd.map(d => D.dayTotals(d).kcal));
     if (a > b * 1.2) add('info', 'calendar', 'Effet week-end', `Tu manges environ ${U.num(a - b)} kcal de plus le samedi et le dimanche. Prévoir un repas du week-end dans le planning aide souvent à garder le cap.`, { label: 'Planifier le week-end', act: 'goPlanning' }, 5);
   }
-  // Rythme de perte
+  // Rythme de perte (ou dérive du poids en maintien)
   const rate = D.rate();
-  if (rate != null && sinceStart > 21) {
+  if (D.isMaintain()) {
+    const pr = D.progress(), wk = D.weekSummary(U.addDays(U.weekStart(today), -7));
+    if (pr.last && !pr.inBand) add('warn', 'scale', pr.ref > pr.band.hi ? 'Poids au-dessus de ta zone' : 'Poids sous ta zone', pr.ref > pr.band.hi ? `Moyenne sur 7 jours : ${U.kg(pr.ref)} kg pour une zone de ${U.num(pr.band.lo, 1)} à ${U.num(pr.band.hi, 1)} kg. Regarde tes repas des deux dernières semaines ou ajoute un peu d'activité.` : `Moyenne sur 7 jours : ${U.kg(pr.ref)} kg, sous ta zone. Mange à ta faim, surtout les jours de séance.`, null, 20);
+    else if (pr.last) add('good', 'scale', 'Poids stable', `Ta moyenne sur 7 jours (${U.kg(pr.ref)} kg) est dans ta zone de ${U.num(pr.band.lo, 1)} à ${U.num(pr.band.hi, 1)} kg.`);
+    if (sinceStart >= 7 && wk.minutes < D.weeklyGoal().min) add('info', 'heart', `${U.num(wk.minutes)} min d'activité la semaine dernière`, `Le repère est de ${D.weeklyGoal().min} minutes par semaine : 30 minutes de marche rapide 5 jours sur 7 suffisent.`, { label: 'Ajouter une activité', act: 'quickActivity' }, 12);
+  }
+  if (rate != null && sinceStart > 21 && !D.isMaintain()) {
     if (rate < -0.01 * w) add('warn', 'trendDown', 'Perte très rapide', `${U.sign(rate, 2)} kg par semaine, soit plus de 1 % de ton poids. Pour protéger tes muscles, ajoute 150 à 250 kcal par jour (idéalement des glucides autour des séances) et garde tes protéines hautes.`, null, 25);
     else if (rate > -0.1) {
       const ms = DB.all('measurements').sort((x, z) => x.date < z.date ? -1 : 1).filter(m => m.waist);
@@ -203,7 +209,7 @@ D.insights = () => D.memo('insights', () => {
   const plannedToday = D.actsOn(today).filter(a => a.status === 'planned');
   if (sinceStart >= 7 && (daysSince == null || daysSince >= 8) && !plannedToday.some(a => a.type === 'strength')) add('warn', 'dumbbell', daysSince == null ? 'Pas encore de renforcement' : `Pas de renforcement depuis ${daysSince} jours`, 'Pour garder ta carrure et tes épaules pendant la perte de gras, vise 2 à 3 séances de renforcement par semaine.', { label: 'Démarrer une séance', act: 'trStart' }, 20);
   const str7 = str.filter(a => a.date >= U.addDays(today, -6)).length;
-  if (str7 >= 2) add('good', 'dumbbell', `${str7} séances de renforcement cette semaine`, 'C\'est le signal qui dit au corps de garder ses muscles pendant le déficit.');
+  if (str7 >= 2) add('good', 'dumbbell', `${str7} séances de renforcement cette semaine`, D.isMaintain() ? 'Le repère recommandé est de 2 séances par semaine : c\'est fait.' : 'C\'est le signal qui dit au corps de garder ses muscles pendant le déficit.');
   const ups = D.templates().flatMap(t => t.items.map(i => i.exId)).filter((v, i, a) => a.indexOf(v) === i).map(id => ({ id, s: D.suggestLoad(id) })).filter(x => x.s && x.s.up);
   if (ups.length) add('info', 'trendUp', `${ups.length} exercice${ups.length > 1 ? 's' : ''} prêt${ups.length > 1 ? 's' : ''} à progresser`, `${ups.slice(0, 3).map(x => `${D.exercise(x.id).name} → ${x.s.kg != null ? U.num(x.s.kg, x.s.kg % 1 ? 1 : 0) + ' kg' : x.s.delta}`).join(', ')}. La suggestion s'affiche pendant ta prochaine séance.`, { label: 'Voir le détail', act: 'goCoach' }, 2);
   // Séance prévue aujourd'hui
@@ -286,9 +292,9 @@ Pages.coach = {
           <div id="sim-out"></div>
         </div></section>
 
-      <section class="card span-12"><div class="card-h"><div><div class="eyebrow">Projection</div><h2>Vers ${U.num(g.goal)} kg</h2></div><span class="spacer"></span><span class="xs faint">Base : ${U.esc(cr.src)} (${U.sign(cr.rate, 2)} kg/sem.)</span></div>
+      <section class="card span-12"><div class="card-h"><div><div class="eyebrow">Projection</div><h2>${D.isMaintain() ? 'Ton poids dans les prochains mois' : `Vers ${U.num(g.goal)} kg`}</h2></div><span class="spacer"></span><span class="xs faint">Base : ${U.esc(cr.src)} (${U.sign(cr.rate, 2)} kg/sem.)</span></div>
         <div class="grid g-4" style="gap:12px;margin-bottom:12px">${[[28, 'Dans 4 semaines'], [91, 'Dans 3 mois'], [182, 'Dans 6 mois']].map(([n, l]) => `<div class="kpi"><span class="l">${l}</span><span class="v">${U.kg(sim.at(U.addDays(sim.d0, n)))}<small>kg</small></span></div>`).join('')}
-          <div class="kpi"><span class="l">${U.num(g.goal)} kg vers</span><span class="v" style="font-size:22px">${sim.goalDate ? U.fmtMonth(sim.goalDate) : 'au-delà de 3 ans'}</span><span class="d faint">${sim.goalDate ? (sim.goalDate <= g.goalDate ? 'avant' : 'après') + ' ' + U.fmtMonth(g.goalDate).toLowerCase() : 'à ce rythme'}</span></div></div>
+          ${D.isMaintain() ? `<div class="kpi"><span class="l">Ta zone</span><span class="v" style="font-size:22px">${U.num(D.band().lo, 1)} – ${U.num(D.band().hi, 1)}<small>kg</small></span><span class="d faint">poids de référence ± ${U.num(D.band().w, 1)} kg</span></div>` : `<div class="kpi"><span class="l">${U.num(g.goal)} kg vers</span><span class="v" style="font-size:22px">${sim.goalDate ? U.fmtMonth(sim.goalDate) : 'au-delà de 3 ans'}</span><span class="d faint">${sim.goalDate ? (sim.goalDate <= g.goalDate ? 'avant' : 'après') + ' ' + U.fmtMonth(g.goalDate).toLowerCase() : 'à ce rythme'}</span></div>`}</div>
         <div id="proj-chart" data-h="260"></div>
         <p class="hint">La courbe ralentit légèrement avec le temps : en perdant du poids, tu dépenses un peu moins d'énergie (≈ 15 kcal par jour et par kilo perdu). Recalculée à chaque pesée, jamais une promesse.</p></section>
 

@@ -114,10 +114,53 @@ const Acc = {
     const all = Cloud.communityRecipes();
     const people = [...new Set(all.map(r => r.author))].filter(Boolean);
     const list = all.filter(r => (!p.cwho || r.author === p.cwho) && (!q.length || q.every(t => U.norm(r.name + ' ' + r.author).includes(t))));
+    if (p.csort === 'top') { const sc = r => { const x = Cloud.reactionsFor(r.docId); return x.tested * 2 + x.likes; }; list.sort((a, b) => sc(b) - sc(a)); }
     return `<div class="stack" style="gap:14px">
-      <div class="row wrap"><div class="input-unit grow" style="min-width:200px;max-width:420px"><input class="input" id="cq" placeholder="Rechercher une recette ou un prénom" value="${U.esc(p.cq || '')}" autocomplete="off"><em>${U.icon('search', 'sm')}</em></div><button class="btn sm ghost" data-act="commRefresh">${U.icon('repeat', 'sm')}Actualiser</button></div>
+      <div class="row wrap"><div class="input-unit grow" style="min-width:200px;max-width:420px"><input class="input" id="cq" placeholder="Rechercher une recette ou un prénom" value="${U.esc(p.cq || '')}" autocomplete="off"><em>${U.icon('search', 'sm')}</em></div><div class="seg"><button data-act="commSort" data-v="" class="${!p.csort ? 'on' : ''}">Récentes</button><button data-act="commSort" data-v="top" class="${p.csort === 'top' ? 'on' : ''}">Les plus testées</button></div><button class="btn sm ghost" data-act="commRefresh">${U.icon('repeat', 'sm')}Actualiser</button></div>
       ${people.length > 1 ? `<div class="chips scroll"><button class="chip ${!p.cwho ? 'on' : ''}" data-act="commWho" data-v="">Tout le monde</button>${people.map(n => `<button class="chip ${p.cwho === n ? 'on' : ''}" data-act="commWho" data-v="${U.esc(n)}">${U.esc(n)}</button>`).join('')}</div>` : ''}
       <div class="grid g-3 recipe-grid" id="cgrid">${list.length ? list.map(r => recipeCard(r)).join('') : `<div class="card" style="grid-column:1/-1">${UI.empty('smile', all.length ? 'Aucune recette ne correspond' : 'Pas encore de recette partagée', all.length ? 'Essaie un autre mot.' : 'Crée une recette : elle apparaîtra ici avec ton prénom, pour tous les inscrits.', `<button class="btn primary" data-act="recipeNew">${U.icon('plus', 'sm')}Créer une recette</button>`)}</div>`}</div>
+    </div>`;
+  },
+  /* Liste de courses partagée */
+  shareCard() {
+    if (!Cloud.on) return '';
+    if (!Cloud.user) return `<div class="note share-note">${U.icon('smile', 'sm')}<span>Tu fais tes courses à deux ? Avec un compte, tu peux partager cette liste avec une personne de ton choix. <button class="linkish" data-act="accOpen" data-mode="signup">Créer mon compte</button></span></div>`;
+    const c = Cloud.list();
+    if (!c) return `<section class="card share-card"><div class="row wrap" style="gap:12px"><span class="ic-badge" style="--c:var(--c-walk)">${U.icon('smile')}</span>
+      <div class="grow" style="min-width:200px"><b>Faire mes courses à deux</b><div class="small muted">Partage cette liste avec <b>une seule personne</b> (conjoint, coloc…). Vous la voyez et la cochez tous les deux, en direct.</div></div>
+      <div class="row wrap" style="gap:6px"><button class="btn sm primary" data-act="listCreate">Partager ma liste</button><button class="btn sm" data-act="listJoin">J'ai un code</button></div></div></section>`;
+    if (c.role === 'owner' && !c.partner) return `<section class="card share-card"><div class="row wrap" style="gap:12px"><span class="ic-badge" style="--c:var(--c-walk)">${U.icon('smile')}</span>
+      <div class="grow" style="min-width:200px"><b>En attente de ton binôme</b><div class="small muted">Envoie ce code à la personne avec qui tu fais tes courses. Elle le saisit dans Courses → « J'ai un code ».</div></div>
+      <div class="share-code">${c.code.slice(0, 4)}-${c.code.slice(4)}</div>
+      <div class="row wrap" style="gap:6px"><button class="btn sm primary" data-act="listSend">${U.icon('upload', 'sm')}Envoyer le code</button><button class="btn sm ghost" data-act="listLeave">Annuler</button></div></div></section>`;
+    return `<section class="card share-card on"><div class="row wrap" style="gap:12px"><span class="ic-badge" style="--c:var(--good)">${U.icon('smile')}</span>
+      <div class="grow" style="min-width:200px"><b>Liste partagée avec ${U.esc(c.partner || 'ton binôme')}</b><div class="small muted">Tout ce que l'un ajoute ou coche apparaît chez l'autre (actualisation toutes les 15 secondes quand la liste est ouverte).</div></div>
+      <div class="row wrap" style="gap:6px"><button class="btn sm" data-act="listRefresh">${U.icon('repeat', 'sm')}Actualiser</button><button class="btn sm ghost" data-act="listLeave">${c.role === 'owner' ? 'Arrêter le partage' : 'Quitter la liste'}</button></div></div></section>`;
+  },
+  pollList() {
+    clearInterval(Acc._lp);
+    if (!Cloud.list()) return;
+    Acc._lp = setInterval(() => {
+      const p = Pages.nutrition;
+      if (!Cloud.list() || !(location.hash || '').startsWith('#repas') || p.tab !== 'courses' || document.visibilityState !== 'visible') { clearInterval(Acc._lp); return; }
+      Cloud.syncList().catch(() => {});
+    }, 15000);
+  },
+  /* Réactions sous une recette de la communauté */
+  reactCounts(r) {
+    const x = Cloud.reactionsFor(r.docId);
+    if (!x.likes && !x.tested && !x.notes.length) return '';
+    return `<span class="react-mini">${x.likes ? `<span>${U.icon('heart', 'sm')}${x.likes}</span>` : ''}${x.tested ? `<span>${U.icon('check', 'sm')}${x.tested} testé${x.tested > 1 ? 's' : ''}</span>` : ''}${x.notes.length ? `<span>${U.icon('note', 'sm')}${x.notes.length}</span>` : ''}</span>`;
+  },
+  reactionsBlock(r) {
+    if (!Cloud.user) return '';
+    const x = Cloud.reactionsFor(r.docId), me = x.mine || {};
+    return `<div class="reactions"><div class="eyebrow">Avis des proches</div>
+      ${r.mine ? `<p class="small muted" style="margin:0">${x.likes} j'aime · ${x.tested} personne${x.tested > 1 ? 's ont' : ' a'} testé ta recette.</p>` : `<div class="row wrap" style="gap:8px">
+        <button class="btn sm ${me.liked ? 'primary' : ''}" data-act="commReact" data-k="liked" data-id="${r.docId}">${U.icon('heart', 'sm')}J'aime${x.likes ? ' · ' + x.likes : ''}</button>
+        <button class="btn sm ${me.tested ? 'primary' : ''}" data-act="commReact" data-k="tested" data-id="${r.docId}">${U.icon('check', 'sm')}J'ai testé${x.tested ? ' · ' + x.tested : ''}</button></div>
+        <div class="row" style="gap:8px;align-items:flex-end"><textarea id="react-note" class="input grow" rows="2" style="height:auto;padding:8px 12px;line-height:1.4" maxlength="280" placeholder="Ton avis, une astuce (facultatif) : « top avec du citron »">${U.esc(me.note || '')}</textarea><button class="btn sm" data-act="commNote" data-id="${r.docId}">${me.note ? 'Modifier' : 'Publier'}</button></div>`}
+      ${x.notes.length ? `<div class="react-notes">${x.notes.map(n => `<div class="rn"><b>${U.esc(n.u === Cloud.user.uid ? 'Toi' : n.a)}</b>${n.tested ? ' <span class="pill planned" style="height:18px">testé</span>' : ''}<span class="xs faint"> · ${Acc.ago(n.t)}</span><p>${U.esc(n.note)}</p></div>`).join('')}</div>` : ''}
     </div>`;
   },
   /* Ingrédients venus d'une recette partagée (aliments perso de l'auteur) : copiés dans tes aliments */
@@ -225,6 +268,53 @@ A.privacy = () => UI.open({
 
 /* ---------- Actions : communauté ---------- */
 A.commRefresh = async () => { try { await Cloud.fetchCommunity(); UI.toast('Communauté à jour'); } catch (e) { UI.toast(Cloud.frErr(e), { type: 'err' }); } };
+A.listCreate = async el => {
+  const ok = await UI.confirm({ title: 'Partager ma liste de courses ?', text: 'Tu obtiens un code à envoyer à <b>une seule personne</b>. Une fois qu\'elle l\'a saisi, vous voyez la même liste : articles, quantités et cases cochées. Tes repas, ton poids et le reste de tes données restent privés.', ok: 'Créer le code' });
+  if (!ok) return;
+  el.disabled = true;
+  try { await Cloud.listCreate(); App.renderView(false); UI.toast('Code créé : envoie-le à ton binôme'); }
+  catch (e) { el.disabled = false; UI.toast(Cloud.frErr(e), { type: 'err' }); }
+};
+A.listJoin = () => UI.open({
+  title: 'Rejoindre une liste', sub: 'Code reçu de ton binôme', size: 'sm',
+  body: `<div class="stack"><label class="field"><span>Code (8 caractères)</span><input id="list-code" autocomplete="off" autocapitalize="characters" placeholder="ABCD-2345" maxlength="9" style="font:700 22px var(--display);letter-spacing:.08em;text-transform:uppercase"></label>
+    <p class="small muted" style="margin:0">Ta liste actuelle sera ajoutée à la liste commune. Ensuite, tout ce que l'un ajoute ou coche apparaît chez l'autre.</p></div>`,
+  footer: `<button class="btn ghost" data-close-top>Annuler</button><button class="btn primary" data-act="listJoinGo">Rejoindre</button>`
+});
+A.listJoinGo = async el => {
+  const v = document.getElementById('list-code').value;
+  el.disabled = true; el.textContent = 'Un instant…';
+  try { const who = await Cloud.listJoin(v); UI.closeAll(); UI.toast(`Liste partagée avec ${who || 'ton binôme'}`); App.changed(); Acc.pollList(); }
+  catch (e) { el.disabled = false; el.textContent = 'Rejoindre'; UI.toast(Cloud.frErr(e), { type: 'err' }); }
+};
+A.listSend = async () => {
+  const c = Cloud.list(); if (!c) return;
+  const code = c.code.slice(0, 4) + '-' + c.code.slice(4);
+  const text = `Rejoins ma liste de courses sur Cap 100 : ouvre l'app, onglet Alimentation → Courses → « J'ai un code », puis saisis ${code}`;
+  try { if (navigator.share) { await navigator.share({ title: 'Liste de courses Cap 100', text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(text); UI.toast('Message copié : colle-le dans une conversation'); } catch (e) { UI.toast('Code : ' + code, { type: 'info', ms: 8000 }); }
+};
+A.listRefresh = async () => { try { await Cloud.syncList(); UI.toast('Liste à jour'); App.renderView(false); } catch (e) { UI.toast(Cloud.frErr(e), { type: 'err' }); } };
+A.listLeave = async () => {
+  const c = Cloud.list(); if (!c) return;
+  const owner = c.role === 'owner';
+  const ok = await UI.confirm({ title: owner ? (c.partner ? 'Arrêter le partage ?' : 'Annuler le partage ?') : 'Quitter la liste ?', text: owner ? `${c.partner ? `${U.esc(c.partner)} ne verra plus ta liste. ` : ''}Tu gardes la liste actuelle sur ton téléphone.` : `Tu ne verras plus la liste de ${U.esc(c.partner || 'ton binôme')}. Tu gardes une copie de la liste actuelle.`, ok: owner ? 'Arrêter' : 'Quitter' });
+  if (!ok) return;
+  try { await Cloud.listLeave(); UI.toast('Partage terminé'); App.renderView(false); } catch (e) { UI.toast(Cloud.frErr(e), { type: 'err' }); }
+};
+A.commSort = el => { Pages.nutrition.csort = el.dataset.v || ''; App.renderView(false); };
+A.commReact = async el => {
+  const x = Cloud.reactionsFor(el.dataset.id), me = x.mine || {};
+  el.disabled = true;
+  try { await Cloud.react(el.dataset.id, { [el.dataset.k]: !me[el.dataset.k] }); UI.refreshAll(); }
+  catch (e) { el.disabled = false; UI.toast(Cloud.frErr(e), { type: 'err' }); }
+};
+A.commNote = async el => {
+  const t = document.getElementById('react-note'); if (!t) return;
+  el.disabled = true;
+  try { await Cloud.react(el.dataset.id, { note: t.value }); UI.toast(t.value.trim() ? 'Avis publié' : 'Avis retiré'); UI.refreshAll(); }
+  catch (e) { el.disabled = false; UI.toast(Cloud.frErr(e), { type: 'err' }); }
+};
 A.commWho = el => { Pages.nutrition.cwho = el.dataset.v || ''; App.renderView(false); };
 A.commShare = async el => { const r = DB.get('recipes', el.dataset.id); if (!r) return; r.shared = true; await DB.put('recipes', r); await Cloud.publish(r); UI.toast('Recette partagée dans la communauté', { type: 'ok' }); UI.refreshAll(); };
 A.commUnshare = async el => {
@@ -250,5 +340,6 @@ Cloud.listen(what => {
     if (!document.getElementById('ob').hidden && D.meta().onboarded) { OB.close(); App.boot(); return; }
     if (D.meta().onboarded) { App.renderView(false); App.updateChrome(); }
   }
+  if (what === 'list' && (location.hash || '').startsWith('#repas') && !UI.stack.length) App.renderView(false);
   if (what === 'community' && Pages.nutrition.tab === 'communaute' && (location.hash || '').startsWith('#repas') && !UI.stack.length) App.renderView(false);
 });

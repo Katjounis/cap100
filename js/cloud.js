@@ -49,7 +49,11 @@ const Cloud = (() => {
     ADMIN_ONLY_OPERATION: 'Les nouvelles inscriptions sont fermées.',
     CREDENTIAL_TOO_OLD_LOGIN_AGAIN: 'Reconnecte-toi puis recommence.',
     PERMISSION_DENIED: 'Accès refusé par le serveur (règles de sécurité).',
-    offline: 'Pas de connexion internet.'
+    offline: 'Pas de connexion internet.',
+    BAD_CODE: 'Le code fait 8 caractères (lettres et chiffres).',
+    NO_LIST: 'Aucune liste avec ce code. Vérifie-le avec la personne qui te l\'a envoyé.',
+    OWN_LIST: 'C\'est ta propre liste : envoie ce code à la personne avec qui tu fais tes courses.',
+    LIST_FULL: 'Cette liste est déjà partagée avec quelqu\'un d\'autre.'
   };
   const frErr = e => { const c = String((e && (e.code || e.message)) || ''); const key = Object.keys(ERR_FR).find(k => c.startsWith(k)); return key ? ERR_FR[key] : 'Erreur du serveur (' + c + ')'; };
 
@@ -76,6 +80,7 @@ const Cloud = (() => {
     S = { uid, email: j.email || (S && S.email), name: j.displayName || name || (S && S.name) || '', idToken: j.idToken || j.id_token, refreshToken: j.refreshToken || j.refresh_token, exp: Date.now() + (+(j.expiresIn || j.expires_in) || 3600) * 1000 };
     ls.set('cap100-session', S);
     outbox = ls.get(K('outbox')) || {};
+    lout = ls.get(K('lout')) || {};
     lastSync = ls.get(K('last'));
   }
   async function idToken(force) {
@@ -108,9 +113,10 @@ const Cloud = (() => {
   let pushTimer = null;
   const saveOutbox = () => S && ls.set(K('outbox'), outbox);
   DB.hook = (s, keys) => {
-    if (!S || gate || LOCAL_ONLY.has(s) || (window.D && D.isDemo && D.isDemo())) return;
-    for (const k of keys) outbox[docId(s, k)] = { s, k, n: ++seq };
-    saveOutbox();
+    if (!S || gate || LOCAL_ONLY.has(s) || (typeof D !== 'undefined' && D.isDemo && D.isDemo())) return;
+    const L = s === 'shopping' && listCfg();
+    for (const k of keys) { if (L) lout[lid(k)] = { k, n: ++seq }; else outbox[docId(s, k)] = { s, k, n: ++seq }; }
+    saveOutbox(); saveLout();
     clearTimeout(pushTimer); pushTimer = setTimeout(() => push().catch(() => {}), 1500);
     if (status === 'ok' || status === 'idle') setStatus('pending');
   };
@@ -136,6 +142,7 @@ const Cloud = (() => {
             saveOutbox();
           }
         } while (again && S);
+        await pushList();
         await flushPublications();
         lastSync = Date.now(); if (S) ls.set(K('last'), lastSync);
         setStatus('ok');
@@ -179,7 +186,7 @@ const Cloud = (() => {
       const id = d.name.split('/').pop(); remote.add(id);
       if (outbox[id]) continue; // modification locale en attente : elle est plus récente
       const f = d.fields || {}, s = val(f, 's');
-      if (!s || !DB.STORES[s] || LOCAL_ONLY.has(s)) continue;
+      if (!s || !DB.STORES[s] || LOCAL_ONLY.has(s) || (s === 'shopping' && listCfg())) continue;
       let k; try { k = JSON.parse(val(f, 'k')); } catch (e) { continue; }
       const cur = DB.get(s, k);
       if (val(f, 'd') === true) { if (cur !== undefined) { (del[s] = del[s] || []).push(k); n++; } continue; }
@@ -205,11 +212,13 @@ const Cloud = (() => {
         const first = !ls.get(K('pull'));
         const { changed, remote } = await pull(first);
         if (first) seed(remote);
+        let lchanged = 0;
+        if (listCfg()) { try { lchanged = await syncList(true); } catch (e) { if (e.offline) throw e; console.warn('Liste partagée :', e.code || e); } }
         ls.set('cap100-owner', S.uid);
         await push();
         fetchCommunity().catch(() => {});
         lastRun = Date.now();
-        if (changed) emit('data');
+        if (changed || lchanged) emit('data');
         return changed;
       } catch (e) { fail(e); throw e; }
       finally { syncing = null; }
@@ -224,6 +233,120 @@ const Cloud = (() => {
       for (const o of DB.all(s)) { const k = o[DB.STORES[s]], id = docId(s, k); if (!remote.has(id)) outbox[id] = { s, k, n: ++seq }; }
     }
     saveOutbox();
+  }
+
+  /* ---------- liste de courses partagée à deux ---------- */
+  /* lists/<code> : { o: propriétaire, on: son prénom, m: membre invité, mn: son prénom }. Connaître le code = être invité.
+     Les articles sont dans lists/<code>/items : la liste locale « shopping » est alors synchronisée avec elle au lieu du compte. */
+  const listCfg = () => { if (!S || typeof D === 'undefined') return null; const c = DB.setting('sharedList', null); return c && c.code ? c : null; };
+  const lid = k => encodeURIComponent(JSON.stringify(k));
+  let lout = S ? ls.get(K('lout')) || {} : {};
+  const saveLout = () => S && ls.set(K('lout'), lout);
+  const LISTS = code => `${DOC}/lists/${code}`;
+  const ALPH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const newCode = () => { const a = new Uint32Array(8); crypto.getRandomValues(a); return [...a].map(x => ALPH[x % ALPH.length]).join(''); };
+  async function getList(code) {
+    try { const d = await http(`${FS}/lists/${code}`, null, { auth: true }); return { o: val(d.fields, 'o'), on: val(d.fields, 'on'), m: val(d.fields, 'm'), mn: val(d.fields, 'mn') }; }
+    catch (e) { if (e.status === 404) return null; throw e; }
+  }
+  async function pushList() {
+    const c = listCfg(); if (!c) return;
+    const entries = Object.entries(lout);
+    for (let i = 0; i < entries.length; i += 200) {
+      const chunk = entries.slice(i, i + 200);
+      const writes = chunk.map(([id, e]) => { const rec = DB.get('shopping', e.k); return { update: { name: `${LISTS(c.code)}/items/${id}`, fields: { k: str(JSON.stringify(e.k)), j: str(rec ? JSON.stringify(rec) : ''), d: { booleanValue: !rec } } }, updateTransforms: tsNow }; });
+      try { await commit(writes); }
+      catch (e) { if (e.status === 403 || e.status === 404) { await listGone(); return; } throw e; }
+      for (const [id, e] of chunk) if (lout[id] && lout[id].n === e.n) delete lout[id];
+      saveLout();
+    }
+  }
+  async function pullList(full) {
+    const c = listCfg(); if (!c) return { changed: 0, remote: new Set() };
+    const key2 = K('lpull') + '-' + c.code;
+    const meta = full ? {} : ls.get(key2) || {};
+    const since = meta.t ? new Date(Date.parse(meta.t) - 60000).toISOString() : null;
+    const remote = new Set(); let cursor = null, maxT = meta.t || null;
+    const put = [], del = [];
+    for (;;) {
+      const q = { from: [{ collectionId: 'items' }], orderBy: [{ field: { fieldPath: 't' }, direction: 'ASCENDING' }, { field: { fieldPath: '__name__' }, direction: 'ASCENDING' }], limit: PAGE };
+      if (since) q.where = { fieldFilter: { field: { fieldPath: 't' }, op: 'GREATER_THAN_OR_EQUAL', value: { timestampValue: since } } };
+      if (cursor) q.startAt = { values: [{ timestampValue: cursor.t }, { referenceValue: cursor.name }], before: false };
+      const docs = await query(`/lists/${c.code}`, q);
+      for (const d of docs) {
+        const id = d.name.split('/').pop(); remote.add(id);
+        if (lout[id]) continue;
+        let k; try { k = JSON.parse(val(d.fields, 'k')); } catch (e) { continue; }
+        const cur = DB.get('shopping', k), j = val(d.fields, 'j');
+        if (val(d.fields, 'd') === true) { if (cur !== undefined) del.push(k); continue; }
+        if (cur !== undefined && JSON.stringify(cur) === j) continue;
+        try { put.push(JSON.parse(j)); } catch (e) { /* ignoré */ }
+      }
+      if (docs.length) { const last = docs[docs.length - 1]; cursor = { t: last.fields.t.timestampValue, name: last.name }; if (!maxT || Date.parse(cursor.t) > Date.parse(maxT)) maxT = cursor.t; }
+      if (docs.length < PAGE) break;
+    }
+    ls.set(key2, { t: maxT });
+    if (put.length || del.length) await DB.quiet(() => Promise.all([put.length ? DB.putMany('shopping', put) : null, del.length ? DB.delMany('shopping', del) : null]));
+    return { changed: put.length + del.length, remote };
+  }
+  /* Vérifie que la liste existe toujours et que tu en fais partie, puis synchronise les articles */
+  async function syncList(fromSync, seedLocal = false) {
+    const c = listCfg(); if (!c) return 0;
+    const L = await getList(c.code);
+    if (!L || (c.role === 'member' && L.m !== S.uid) || (c.role === 'owner' && L.o !== S.uid)) { await listGone(L ? 'removed' : 'deleted'); return 1; }
+    const partner = c.role === 'owner' ? L.mn || '' : L.on || '';
+    if (partner !== (c.partner || '')) await DB.setSetting('sharedList', { ...c, partner });
+    const first = !ls.get(K('lpull') + '-' + c.code);
+    const { changed, remote } = await pullList(first);
+    if (first) {
+      const localOnly = DB.all('shopping').filter(o => !remote.has(lid(o.id)));
+      if (seedLocal) { for (const o of localOnly) lout[lid(o.id)] = { k: o.id, n: ++seq }; saveLout(); }
+      else if (localOnly.length) await DB.quiet(() => DB.delMany('shopping', localOnly.map(o => o.id))); // ancienne copie sur un autre appareil
+    }
+    if (!fromSync) { await pushList(); if (changed) emit('data'); emit('list'); }
+    return changed;
+  }
+  async function listGone(why) {
+    const c = listCfg(); if (!c) return;
+    ls.del(K('lpull') + '-' + c.code); lout = {}; saveLout();
+    await DB.setSetting('sharedList', null);
+    emit('list'); emit('data');
+    if (typeof UI !== 'undefined') UI.toast(c.role === 'member' ? `La liste partagée avec ${c.partner || 'ton proche'} a été arrêtée. Ta liste reste sur ton téléphone.` : 'Le partage de la liste est terminé. Ta liste reste sur ton téléphone.', { type: 'info', ms: 6000 });
+  }
+  async function listCreate() {
+    const code = newCode();
+    await commit([{ update: { name: LISTS(code), fields: { o: str(S.uid), on: str(S.name || 'Anonyme'), m: str(''), mn: str('') } }, updateTransforms: tsNow, currentDocument: { exists: false } }]);
+    await DB.setSetting('sharedList', { code, role: 'owner', partner: '' });
+    for (const o of DB.all('shopping')) lout[lid(o.id)] = { k: o.id, n: ++seq };
+    saveLout(); ls.set(K('lpull') + '-' + code, { t: null });
+    await pushList(); emit('list');
+    return code;
+  }
+  async function listJoin(raw) {
+    const code = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 8) throw Object.assign(new Error('BAD_CODE'), { code: 'BAD_CODE' });
+    const L = await getList(code);
+    if (!L) throw Object.assign(new Error('NO_LIST'), { code: 'NO_LIST' });
+    if (L.o === S.uid) throw Object.assign(new Error('OWN_LIST'), { code: 'OWN_LIST' });
+    if (L.m && L.m !== S.uid) throw Object.assign(new Error('LIST_FULL'), { code: 'LIST_FULL' });
+    if (L.m !== S.uid) await commit([{ update: { name: LISTS(code), fields: { m: str(S.uid), mn: str(S.name || 'Anonyme') } }, updateMask: { fieldPaths: ['m', 'mn'] }, updateTransforms: tsNow }]);
+    await DB.setSetting('sharedList', { code, role: 'member', partner: L.on || '' });
+    await syncList(false, true);
+    return L.on;
+  }
+  async function listLeave() {
+    const c = listCfg(); if (!c) return;
+    try { await pushList(); } catch (e) { /* pas grave */ }
+    if (c.role === 'owner') {
+      for (;;) { const docs = await query(`/lists/${c.code}`, { from: [{ collectionId: 'items' }], select: { fields: [{ fieldPath: '__name__' }] }, limit: PAGE }); if (!docs.length) break; await commit(docs.map(d => ({ delete: d.name }))); }
+      await commit([{ delete: LISTS(c.code) }]);
+    } else await commit([{ update: { name: LISTS(c.code), fields: { m: str(''), mn: str('') } }, updateMask: { fieldPaths: ['m', 'mn'] }, updateTransforms: tsNow }]);
+    ls.del(K('lpull') + '-' + c.code); lout = {}; saveLout();
+    await DB.setSetting('sharedList', null);
+    /* la liste locale redevient personnelle : on la renvoie sur ton compte */
+    for (const o of DB.all('shopping')) outbox[docId('shopping', o.id)] = { s: 'shopping', k: o.id, n: ++seq };
+    saveOutbox(); await push().catch(() => {});
+    emit('list');
   }
 
   /* ---------- comptes ---------- */
@@ -252,7 +375,7 @@ const Cloud = (() => {
   function wipeLocal() {
     const uid = S && S.uid;
     const p = DB.quiet(() => DB.clearAll());
-    ls.del('cap100-owner'); ls.del('cap100-community');
+    ls.del('cap100-owner'); ls.del('cap100-community'); ls.del('cap100-reactions'); reacts = [];
     if (uid) { ls.del(`cap100-pull-${uid}`); ls.del(`cap100-outbox-${uid}`); outbox = {}; }
     return p;
   }
@@ -279,6 +402,8 @@ const Cloud = (() => {
     }
     const pubs = await query('', { from: [{ collectionId: 'community' }], where: { fieldFilter: { field: { fieldPath: 'u' }, op: 'EQUAL', value: str(S.uid) } } });
     if (pubs.length) await commit(pubs.map(d => ({ delete: d.name })));
+    const rx = await query('', { from: [{ collectionId: 'reactions' }], where: { fieldFilter: { field: { fieldPath: 'u' }, op: 'EQUAL', value: str(S.uid) } } });
+    if (rx.length) await commit(rx.map(d => ({ delete: d.name })));
     await http(AUTH + 'delete' + key(), { idToken: S.idToken });
     await wipeLocal();
     S = null; ls.del('cap100-session'); setStatus('signedout'); emit('session');
@@ -293,10 +418,33 @@ const Cloud = (() => {
     if (!S) return comm;
     const docs = await query('', { from: [{ collectionId: 'community' }], orderBy: [{ field: { fieldPath: 't' }, direction: 'DESCENDING' }], limit: 500 });
     comm = docs.map(d => ({ id: d.name.split('/').pop(), u: val(d.fields, 'u'), a: val(d.fields, 'a'), t: val(d.fields, 't'), j: val(d.fields, 'j'), rid: val(d.fields, 'rid') }));
+    try { await fetchReactions(); } catch (e) { /* réactions indisponibles : la liste reste utilisable */ }
     ls.set('cap100-community', comm); commRev++; commCache = null;
     emit('community');
     return comm;
   }
+  /* ---------- réactions : « j'aime », « j'ai testé », petit avis ---------- */
+  let reacts = ls.get('cap100-reactions') || [];
+  async function fetchReactions() {
+    const docs = await query('', { from: [{ collectionId: 'reactions' }], limit: 3000 });
+    reacts = docs.map(d => ({ id: d.name.split('/').pop(), c: val(d.fields, 'c'), u: val(d.fields, 'u'), a: val(d.fields, 'a'), liked: val(d.fields, 'liked') === true, tested: val(d.fields, 'tested') === true, note: val(d.fields, 'note') || '', t: val(d.fields, 't') }));
+    ls.set('cap100-reactions', reacts);
+  }
+  function reactionsFor(docIdStr) {
+    const arr = reacts.filter(x => x.c === docIdStr && (x.liked || x.tested || x.note));
+    return { likes: arr.filter(x => x.liked).length, tested: arr.filter(x => x.tested).length, notes: arr.filter(x => x.note).sort((a, b) => (b.t || '') > (a.t || '') ? 1 : -1), mine: S ? arr.find(x => x.u === S.uid) || null : null, all: arr };
+  }
+  async function react(docIdStr, patch) {
+    if (!S) throw Object.assign(new Error('signedout'), { code: 'signedout' });
+    const cur = reacts.find(x => x.c === docIdStr && x.u === S.uid) || { liked: false, tested: false, note: '' };
+    const next = { ...cur, ...patch };
+    next.note = String(next.note || '').trim().slice(0, 280);
+    const name = `${DOC}/reactions/${docIdStr}__${S.uid}`;
+    if (!next.liked && !next.tested && !next.note) await commit([{ delete: name }]);
+    else await commit([{ update: { name, fields: { c: str(docIdStr), u: str(S.uid), a: str(S.name || 'Anonyme'), liked: { booleanValue: !!next.liked }, tested: { booleanValue: !!next.tested }, note: str(next.note) } }, updateTransforms: tsNow }]);
+    await fetchReactions(); commRev++; emit('community');
+  }
+
   function toRecipe(c) {
     let o; try { o = JSON.parse(c.j); } catch (e) { return null; }
     const id = 'cm-' + c.id;
@@ -374,7 +522,8 @@ const Cloud = (() => {
     pending: () => Object.keys(outbox).length + Object.keys((S && ls.get(pubKey())) || {}).length,
     listen: fn => listeners.push(fn),
     signUp, signIn, signOut, release, resetPassword, rename, deleteAccount, ownerMismatch, wipeLocal,
-    sync, push, fetchCommunity, communityRecipes, communityRecipe, communityFood, publish, unpublish, removeCommunity,
+    sync, push, fetchCommunity, reactionsFor, react,
+    list: () => listCfg(), listCreate, listJoin, listLeave, syncList, communityRecipes, communityRecipe, communityFood, publish, unpublish, removeCommunity,
     isAdmin: () => !!(S && C.adminEmail && S.email && S.email.toLowerCase() === String(C.adminEmail).toLowerCase()),
     frErr
   };

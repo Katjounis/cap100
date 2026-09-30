@@ -36,7 +36,7 @@ const App = {
     if (location.hash === '#' + id) this.renderView(); else location.hash = id;
   },
   shell() {
-    const navHtml = NAV.map(g => `<div class="nav-group">${g.group}</div>${g.items.map((it, i) => `<a class="nav-link" href="#${it.id}" data-nav="${it.id}">${U.icon(it.icon)}${it.label}</a>`).join('')}`).join('');
+    const navHtml = NAV.map(g => `<div class="nav-group">${g.group}</div>${g.items.map((it, i) => `<a class="nav-link" href="#${it.id}" data-nav="${it.id}">${U.icon(it.id === 'objectif' && D.isMaintain() ? 'heart' : it.icon)}${it.id === 'objectif' && D.isMaintain() ? 'Ma forme' : it.label}</a>`).join('')}`).join('');
     document.getElementById('sidebar').innerHTML = `<div class="brand"><span class="brand-mark">100</span><div><div class="brand-name">Cap 100</div><div class="brand-sub">Transformation physique</div></div></div>
       <button class="btn primary block quick" data-act="quickOpen">${U.icon('plus', 'sm')}Ajouter<kbd style="margin-left:auto;background:transparent;color:inherit;border-color:currentColor;opacity:.6">N</kbd></button>
       ${navHtml}<div class="sidebar-foot"><div id="cloud-chip">${Acc.chip()}</div><div class="mini-goal" id="mini-goal"></div>
@@ -49,12 +49,12 @@ const App = {
     const r = this.parse();
     U.$$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === r.nav));
     const page = Pages[r.page];
-    const title = r.page === 'workout' ? 'Séance' : (ROUTES[r.id] || {}).label || page.title;
+    const title = r.page === 'workout' ? 'Séance' : r.id === 'objectif' && D.isMaintain() ? 'Ma forme' : (ROUTES[r.id] || {}).label || page.title;
     document.getElementById('top-title').textContent = title;
     document.title = r.id === 'accueil' ? 'Cap 100' : `${title} · Cap 100`;
     const prog = D.progress();
     const mg = document.getElementById('mini-goal');
-    if (mg) mg.innerHTML = `<div class="row between"><span>Vers ${U.num(prog.g.goal)} kg</span><b>${U.num(prog.pct * 100)} %</b></div>${UI.bar(prog.pct, 'var(--accent)')}<div class="xs faint" style="margin-top:6px">${U.kg(prog.ref)} kg · moyenne 7 jours</div>`;
+    if (mg) mg.innerHTML = D.miniGoal();
     const cc = document.getElementById('cloud-chip'); if (cc) cc.innerHTML = Acc.chip();
     const theme = (DB.setting('prefs', {}).theme) || 'system';
     const tb = document.getElementById('theme-btn');

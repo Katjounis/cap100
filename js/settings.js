@@ -23,12 +23,19 @@ Pages.settings = {
           </div><div class="row"><span class="grow"></span><button class="btn primary" data-act="saveProfile">Enregistrer</button></div></form></section>
 
         <section class="card"><div class="card-h"><span class="ic-badge sm" style="--c:var(--goal)">${U.icon('flag')}</span><h2>Objectif</h2></div>
-          <form id="set-goal" class="stack"><div class="fields">
+          <div class="seg full mode-seg" style="margin-bottom:14px">${D.MODES.map(m => `<button data-act="setMode" data-v="${m.id}" class="${D.mode() === m.id ? 'on' : ''}">${U.icon(m.icon, 'sm')} ${m.label}</button>`).join('')}</div>
+          ${D.isMaintain() ? `<form id="set-goal" class="stack"><div class="fields">
+            <label class="field"><span>Poids de référence</span><div class="input-unit"><input id="sm-base" inputmode="decimal" value="${U.num(D.band().base, 1)}"><em>kg</em></div></label>
+            <label class="field"><span>Marge</span><div class="input-unit"><input id="sm-band" inputmode="decimal" value="${U.num(D.band().w, 1)}"><em>± kg</em></div></label>
+            <label class="field"><span>Activité par semaine</span><div class="input-unit"><input id="sm-min" inputmode="numeric" value="${D.weeklyGoal().min}"><em>min</em></div></label>
+            <label class="field"><span>Séances par semaine</span><div class="input-unit"><input id="sm-ses" inputmode="numeric" value="${D.weeklyGoal().sessions}"><em>séances</em></div></label>
+          </div><div class="note">${U.icon('info', 'sm')}<span>Ta zone de poids est ${U.num(D.band().lo, 1)} – ${U.num(D.band().hi, 1)} kg. L'OMS recommande au moins 150 minutes d'activité modérée par semaine, dont 2 séances de renforcement.</span></div>
+          <div class="row"><span class="grow"></span><button class="btn primary" data-act="saveMaintain">Enregistrer</button></div></form></section>` : `<form id="set-goal" class="stack"><div class="fields">
             <label class="field"><span>Poids visé</span><div class="input-unit"><input id="sg-goal" inputmode="decimal" value="${p.goalWeight ? U.num(p.goalWeight, 1) : 100}"><em>kg</em></div></label>
             <label class="field"><span>Échéance visée</span><input type="date" id="sg-date" value="${p.goalDate || '2027-11-30'}"></label>
             <label class="field full"><span>Paliers intermédiaires</span><input id="sg-ms" value="${(p.milestones || [125, 120, 115, 110, 105, 100]).join(', ')}"><small>Séparés par des virgules. Validés quand la moyenne sur 7 jours passe dessous.</small></label>
           </div><div class="note">${U.icon('info', 'sm')}<span>L'échéance est un repère personnel, pas une promesse. Si ton corps va moins vite, l'application montre simplement ta progression réelle.</span></div>
-          <div class="row"><span class="grow"></span><button class="btn primary" data-act="saveGoal">Enregistrer</button></div></form></section>
+          <div class="row"><span class="grow"></span><button class="btn primary" data-act="saveGoal">Enregistrer</button></div></form></section>`}
 
         <section class="card"><div class="card-h"><span class="ic-badge sm" style="--c:var(--c-food)">${U.icon('food')}</span><h2>Objectifs quotidiens</h2></div>
           <form id="set-nut" class="stack">
@@ -125,6 +132,28 @@ A.saveGoal = async () => {
   await DB.setSetting('profile', { ...p, goalWeight: goal, goalDate: date, milestones: ms.length ? ms : undefined });
   UI.toast('Objectif enregistré'); App.changed();
 };
+A.setMode = async el => {
+  const mode = el.dataset.v; if (mode === D.mode()) return;
+  const p = D.profile();
+  const ok = await UI.confirm({ title: mode === 'maintain' ? 'Passer en mode « Rester en forme » ?' : 'Passer en mode « Perdre du poids » ?', text: mode === 'maintain' ? 'Plus de poids visé ni de paliers : ton poids actuel devient ta référence (± 2 kg) et l\'accueil suit ton activité de la semaine. Tes cibles caloriques sont recalculées sans déficit. Tes données ne changent pas.' : 'L\'accueil suivra de nouveau ton poids visé, tes paliers et ton échéance. Tes cibles caloriques sont recalculées avec un déficit modéré. Tes données ne changent pas.', ok: 'Changer' });
+  if (!ok) return;
+  const w = D.bodyWeight();
+  const np = { ...p, mode };
+  if (mode === 'maintain' && !p.baseWeight) np.baseWeight = Math.round(w * 10) / 10;
+  if (mode === 'lose' && (!p.goalWeight || p.goalWeight >= w - 1 || (p.startWeight || 0) <= p.goalWeight)) { np.goalWeight = Math.round(w * 0.9); np.goalDate = U.addDays(U.today(), 365); np.startWeight = Math.round(w * 10) / 10; np.startDate = U.today(); np.milestones = OB.ms(np.startWeight, np.goalWeight); }
+  await DB.setSetting('profile', np);
+  const e = D.estimate({ sex: np.sex, age: np.age, height: np.height, weight: w, activity: np.activity, pace: np.pace, goalWeight: np.goalWeight, mode });
+  await DB.setSetting('targets', { ...D.targets(), kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat });
+  UI.toast(mode === 'maintain' ? 'Mode « Rester en forme » activé' : 'Mode « Perdre du poids » activé');
+  App.shell(); App.changed();
+};
+A.saveMaintain = async () => {
+  const n = id => U.parseNum(document.getElementById(id).value);
+  const base = n('sm-base'), band = n('sm-band'), min = n('sm-min'), ses = n('sm-ses');
+  if (!base || base < 30 || base > 400) { UI.toast('Poids de référence invalide', { type: 'err' }); return; }
+  await DB.setSetting('profile', { ...D.profile(), baseWeight: base, band: U.clamp(band || 2, 0.5, 10), weeklyMin: U.clamp(min || 150, 30, 1500), weeklySessions: U.clamp(ses || 3, 1, 14) });
+  UI.toast('Objectif enregistré'); App.changed();
+};
 A.applyEstimate = () => {
   const p = { ...D.profile(), activity: document.getElementById('sn-act').value, pace: document.getElementById('sn-pace').value };
   const e = D.estimate({ sex: p.sex, age: p.age, height: p.height, weight: D.bodyWeight(), activity: p.activity, pace: p.pace, goalWeight: p.goalWeight });
@@ -217,7 +246,7 @@ const OB = {
     const today = U.today();
     const u = typeof Cloud !== 'undefined' && Cloud.user;
     if (u && step === 0) step = 1;
-    this.st = { step, name: u ? u.name : '', sex: 'm', age: '', height: '', weight: '', startDate: today, goal: '', goalDate: U.addDays(today, 365), activity: 'light', pace: 'moderate', targets: null };
+    this.st = { step, name: u ? u.name : '', sex: 'm', age: '', height: '', weight: '', startDate: today, goal: '', goalDate: U.addDays(today, 365), activity: 'light', pace: 'moderate', targets: null, mode: 'lose', weeklyMin: 150, weeklySessions: 3 };
     document.getElementById('ob').hidden = false;
     document.body.style.overflow = 'hidden';
     this.render();
@@ -228,8 +257,8 @@ const OB = {
     const steps = `<div class="ob-steps">${[1, 2, 3].map(i => `<i class="${s.step >= i ? 'on' : ''}"></i>`).join('')}</div>`;
     let h;
     if (s.step === 0) h = `<div class="brand" style="padding:0"><span class="brand-mark">100</span><span class="brand-name">Cap 100</span></div>
-      <h1>Ta transformation,<br><em>pas à pas.</em></h1>
-      <p class="lead">Un centre de contrôle personnel pour suivre ton poids, ton alimentation, tes séances et tes habitudes, du point de départ jusqu'à ton objectif.</p>
+      <h1>Ta forme,<br><em>pas à pas.</em></h1>
+      <p class="lead">Un centre de contrôle personnel pour suivre ton poids, ton alimentation, tes séances et tes habitudes : pour perdre du poids ou simplement rester en forme.</p>
       <div class="ob-path"><span>Point de départ</span>${U.icon('chevR', 'lg')}<span>progression</span>${U.icon('chevR', 'lg')}<span class="to">objectif</span></div>
       ${Cloud.on ? Acc.welcome() : `<div class="stack"><button class="ob-choice" data-act="obMine"><span class="ic-badge" style="--c:var(--accent)">${U.icon('flag')}</span><span class="grow"><b>Commencer avec mes données</b><span>Profil, objectif et cibles en 3 étapes rapides.</span></span>${U.icon('chevR')}</button>
         <button class="ob-choice" data-act="obDemo"><span class="ic-badge" style="--c:var(--goal)">${U.icon('sparkle')}</span><span class="grow"><b>Explorer avec des données de démo</b><span>7 semaines fictives pour découvrir l'interface. Supprimables en un clic.</span></span>${U.icon('chevR')}</button></div>
@@ -244,11 +273,20 @@ const OB = {
         <label class="field"><span>Date de départ</span><input type="date" id="ob-sdate" value="${s.startDate}"></label>
       </div></form>
       <div class="row"><button class="btn ghost" data-act="obBack">Retour</button><span class="grow"></span><button class="btn primary lg" data-act="obNext">Continuer</button></div>`;
-    else if (s.step === 2) {
+    else if (s.step === 2 && s.mode === 'maintain') {
+      h = `${steps}<h1>Ton <em>cap</em></h1><p class="lead">Que veux-tu faire avec Cap 100 ?</p>
+      <div class="seg full mode-seg">${D.MODES.map(m => `<button type="button" data-obmode="${m.id}" class="${s.mode === m.id ? 'on' : ''}">${U.icon(m.icon, 'sm')} ${m.label}</button>`).join('')}</div>
+      <form id="ob-f" class="stack"><div class="fields keep">
+        <label class="field"><span>Activité par semaine</span><div class="input-unit"><input id="ob-wmin" inputmode="numeric" value="${s.weeklyMin}"><em>min</em></div></label>
+        <label class="field"><span>Séances par semaine</span><div class="input-unit"><input id="ob-wses" inputmode="numeric" value="${s.weeklySessions}"><em>séances</em></div></label></div></form>
+      <div class="note">${U.icon('heart', 'sm')}<span>Pas de régime : ton poids actuel (${U.kg(s.weight)} kg) devient ta référence, avec une zone de ± 2 kg. L'accueil suit surtout ton activité de la semaine. Repère de l'OMS : au moins 150 minutes d'activité modérée par semaine.</span></div>
+      <div class="row"><button class="btn ghost" data-act="obBack">Retour</button><span class="grow"></span><button class="btn primary lg" data-act="obNext">Continuer</button></div>`;
+    } else if (s.step === 2) {
       const weeks = U.diffDays(s.startDate, s.goalDate) / 7;
       const rate = weeks > 0 ? (s.weight - s.goal) / weeks : 0;
       const pct = rate / s.weight * 100;
       h = `${steps}<h1>Ton <em>cap</em></h1><p class="lead">Un objectif chiffré et une échéance, pour se situer. Ce n'est pas une obligation : l'application te montrera ta progression réelle.</p>
+      <div class="seg full mode-seg">${D.MODES.map(m => `<button type="button" data-obmode="${m.id}" class="${s.mode === m.id ? 'on' : ''}">${U.icon(m.icon, 'sm')} ${m.label}</button>`).join('')}</div>
       <form id="ob-f" class="stack"><div class="fields keep">
         <label class="field"><span>Poids visé</span><div class="input-unit"><input id="ob-goal" inputmode="decimal" value="${U.num(s.goal, 1)}"><em>kg</em></div></label>
         <label class="field"><span>Échéance visée</span><input type="date" id="ob-gdate" value="${s.goalDate}"></label></div></form>
@@ -256,12 +294,12 @@ const OB = {
       <p class="hint">Des paliers tous les 5 kg seront créés automatiquement : ${OB.ms(s.weight, s.goal).map(v => U.num(v)).join(' → ')} kg.</p>
       <div class="row"><button class="btn ghost" data-act="obBack">Retour</button><span class="grow"></span><button class="btn primary lg" data-act="obNext">Continuer</button></div>`;
     } else {
-      const e = D.estimate({ sex: s.sex, age: s.age || 25, height: s.height, weight: s.weight, activity: s.activity, pace: s.pace, goalWeight: s.goal });
+      const e = D.estimate({ sex: s.sex, age: s.age || 25, height: s.height, weight: s.weight, activity: s.activity, pace: s.pace, goalWeight: s.goal, mode: s.mode });
       const t = s.targets || { kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat };
       h = `${steps}<h1>Tes repères <em>du quotidien</em></h1><p class="lead">Une estimation de départ, à ajuster selon ton ressenti et ta progression.</p>
       <form id="ob-f" class="stack"><div class="fields keep">
         <label class="field"><span>Niveau d'activité</span><select id="ob-act">${D.ACTIVITY_LEVELS.map(a => `<option value="${a.id}" ${s.activity === a.id ? 'selected' : ''}>${a.label}</option>`).join('')}</select></label>
-        <label class="field"><span>Rythme</span><select id="ob-pace">${D.PACES.map(a => `<option value="${a.id}" ${s.pace === a.id ? 'selected' : ''}>${a.label} (${a.hint})</option>`).join('')}</select></label></div>
+        ${s.mode === 'maintain' ? `<input type="hidden" id="ob-pace" value="${s.pace}">` : `<label class="field"><span>Rythme</span><select id="ob-pace">${D.PACES.map(a => `<option value="${a.id}" ${s.pace === a.id ? 'selected' : ''}>${a.label} (${a.hint})</option>`).join('')}</select></label>`}</div>
         <div class="est"><div><b>${U.num(e.bmr)}</b><span>Métabolisme de base</span></div><div><b>${U.num(e.tdee)}</b><span>Dépense estimée</span></div></div>
         <div class="fields keep">
           <label class="field"><span>Calories / jour</span><div class="input-unit"><input id="ob-kcal" inputmode="numeric" value="${t.kcal}"><em>kcal</em></div></label>
@@ -279,13 +317,15 @@ const OB = {
       document.getElementById('ob-pace').addEventListener('change', reEst);
     }
     if (s.step === 2) U.$$('#ob-goal, #ob-gdate').forEach(i => i.addEventListener('change', () => { OB.read(); OB.render(); }));
+    if (s.step === 2) U.$$('[data-obmode]').forEach(b => b.addEventListener('click', () => { OB.read(); s.mode = b.dataset.obmode; s.targets = null; OB.render(); }));
   },
   read() {
     const s = this.st, v = id => { const e = document.getElementById(id); return e ? e.value : null; };
     if (s.step === 1) {
       s.name = v('ob-name').trim(); s.sex = document.querySelector('#ob-f input[name="sex"]').value; s.age = U.parseNum(v('ob-age')) || ''; s.height = U.parseNum(v('ob-height')) || '';
       s.weight = U.parseNum(v('ob-weight')) || ''; s.startDate = v('ob-sdate') || U.today();
-    } else if (s.step === 2) { s.goal = U.parseNum(v('ob-goal')) || s.goal; s.goalDate = v('ob-gdate') || s.goalDate; }
+    } else if (s.step === 2 && s.mode === 'maintain') { s.weeklyMin = U.parseNum(v('ob-wmin')) || 150; s.weeklySessions = U.parseNum(v('ob-wses')) || 3; }
+    else if (s.step === 2) { s.goal = U.parseNum(v('ob-goal')) || s.goal; s.goalDate = v('ob-gdate') || s.goalDate; }
     else if (s.step === 3) { s.activity = v('ob-act'); s.pace = v('ob-pace'); s.targets = { kcal: U.parseNum(v('ob-kcal')), protein: U.parseNum(v('ob-p')), carbs: U.parseNum(v('ob-c')), fat: U.parseNum(v('ob-fat')) }; }
   }
 };
@@ -303,7 +343,7 @@ A.obNext = () => {
   if (s.step === 1 && !(s.weight >= 30 && s.weight <= 400)) { UI.toast('Indique ton poids actuel', { type: 'err' }); return; }
   if (s.step === 1 && !(s.height >= 120 && s.height <= 230)) { UI.toast('Indique ta taille en cm', { type: 'err' }); return; }
   if (s.step === 1 && (!s.goal || s.goal >= s.weight)) s.goal = Math.round(s.weight * 0.9);
-  if (s.step === 2) {
+  if (s.step === 2 && s.mode !== 'maintain') {
     if (s.goal >= s.weight) { UI.toast('Le poids visé doit être inférieur au poids actuel', { type: 'err' }); return; }
     if (s.goalDate <= s.startDate) { UI.toast('L\'échéance doit être après la date de départ', { type: 'err' }); return; }
   }
@@ -311,10 +351,11 @@ A.obNext = () => {
 };
 A.obFinish = async () => {
   OB.read(); const s = OB.st;
-  const e = D.estimate({ sex: s.sex, age: s.age || 25, height: s.height, weight: s.weight, activity: s.activity, pace: s.pace, goalWeight: s.goal });
+  const e = D.estimate({ sex: s.sex, age: s.age || 25, height: s.height, weight: s.weight, activity: s.activity, pace: s.pace, goalWeight: s.goal, mode: s.mode });
   const t = s.targets;
-  const ms = OB.ms(s.weight, s.goal);
-  await DB.setSetting('profile', { name: s.name, sex: s.sex, age: s.age || null, height: s.height, startWeight: s.weight, startDate: s.startDate, goalWeight: s.goal, goalDate: s.goalDate, activity: s.activity, pace: s.pace, milestones: ms });
+  const mt = s.mode === 'maintain';
+  const ms = mt ? [] : OB.ms(s.weight, s.goal);
+  await DB.setSetting('profile', { name: s.name, sex: s.sex, age: s.age || null, height: s.height, startWeight: s.weight, startDate: s.startDate, goalWeight: mt ? s.weight : s.goal, goalDate: s.goalDate, activity: s.activity, pace: s.pace, milestones: ms, mode: s.mode, ...(mt ? { baseWeight: s.weight, band: 2, weeklyMin: s.weeklyMin, weeklySessions: s.weeklySessions } : {}) });
   await DB.setSetting('targets', { kcal: t.kcal || e.kcal, protein: t.protein || e.protein, carbs: t.carbs || e.carbs, fat: t.fat || e.fat, steps: 8000, activeMin: 40 });
   await DB.put('weights', { date: s.startDate, kg: s.weight, note: 'Point de départ' });
   await DB.putMany('templates', D.defaultTemplates());

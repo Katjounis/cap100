@@ -5,9 +5,10 @@ Pages.goal = {
   title: 'Objectif',
   nav: 'objectif',
   render() {
+    if (D.isMaintain()) return D.maintainPage();
     const prog = D.progress(), g = prog.g;
     const ms = D.milestones();
-    const nodes = [{ kg: g.start, pct: 0, on: true }, ...ms.map(m => ({ kg: m.kg, pct: (g.start - m.kg) / (g.start - g.goal), on: !!m.date, goal: m.goal }))];
+    const nodes = [{ kg: g.start, pct: 0, on: true }, ...ms.map(m => ({ kg: m.kg, pct: g.start > g.goal ? (g.start - m.kg) / (g.start - g.goal) : 1, on: !!m.date, goal: m.goal }))];
     const rate = D.rate(), req = D.requiredRate(), proj = D.projection();
     const nextIdx = ms.findIndex(m => !m.date);
     const months = D.monthsTimeline();
@@ -48,6 +49,7 @@ Pages.goal = {
     </div>`;
   },
   mount(root) {
+    if (D.isMaintain()) { D.maintainMount(root); return; }
     weightChart(root.querySelector('#goal-chart'), { period: 'all', layers: { raw: false, avg: true, trend: false, plan: true } });
     const tl = root.querySelector('#tl'), cur = tl && tl.querySelector('.current');
     if (cur) tl.scrollLeft = Math.max(0, cur.offsetLeft - tl.offsetLeft - 20);

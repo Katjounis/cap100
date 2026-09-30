@@ -63,10 +63,11 @@ Pages.dashboard = {
     const dayN = U.diffDays(g.startDate, today) + 1;
     const weekN = Math.floor(Math.max(0, dayN - 1) / 7) + 1;
     return `<div class="hello"><div><h1>${hello}${p.name ? ' ' + U.esc(p.name) : ''}</h1>
-      <div class="sub">${U.fmtLong(today)}${dayN >= 1 ? ` · jour ${U.num(dayN)} · semaine ${weekN} de ta transformation` : ` · départ dans ${-dayN + 1} jours`}</div></div>
+      <div class="sub">${U.fmtLong(today)}${dayN >= 1 ? ` · jour ${U.num(dayN)} · semaine ${weekN} ${D.isMaintain() ? 'de ton suivi' : 'de ta transformation'}` : ` · départ dans ${-dayN + 1} jours`}</div></div>
       <div class="actions row"><button class="btn" data-act="quickWeight">${U.icon('scale', 'sm')}Pesée</button><button class="btn primary" data-act="quickOpen">${U.icon('plus', 'sm')}Ajouter</button></div></div>
     <div class="grid g-dash">
-      ${this.heroCard(prog)}
+      ${D.reportStrip()}
+      ${D.isMaintain() ? D.maintainHero() : this.heroCard(prog)}
       ${this.todayCard()}
       ${D.coachStrip()}
       <section class="card span-8 o2"><div class="card-h"><div><div class="eyebrow">Progression</div><h2>Évolution du poids</h2></div><span class="spacer"></span>
@@ -83,7 +84,7 @@ Pages.dashboard = {
   heroCard(prog) {
     const g = prog.g, cur = prog.last;
     const ms = D.milestones();
-    const nodes = [{ kg: g.start, pct: 0, on: true }, ...ms.map(m => ({ kg: m.kg, pct: (g.start - m.kg) / (g.start - g.goal), on: !!m.date, goal: m.goal }))];
+    const nodes = [{ kg: g.start, pct: 0, on: true }, ...ms.map(m => ({ kg: m.kg, pct: g.start > g.goal ? (g.start - m.kg) / (g.start - g.goal) : 1, on: !!m.date, goal: m.goal }))];
     const rate = D.rate(), req = D.requiredRate(), proj = D.projection();
     const monthsLeft = Math.max(0, Math.round(U.diffDays(U.today(), g.goalDate) / 30.4));
     let insight;
@@ -141,7 +142,7 @@ Pages.dashboard = {
     const ws = U.weekStart(U.today()), w = this.weekData = D.weekSummary(ws), prev = D.weekSummary(U.addDays(ws, -7));
     const t = U.today();
     const dW = w.weight != null && prev.weight != null ? w.weight - prev.weight : null;
-    return `<section class="card span-4 o1"><div class="card-h"><div><div class="eyebrow">Cette semaine</div><h2>${U.fmtShort(ws)} – ${U.fmtShort(U.addDays(ws, 6))}</h2></div><span class="spacer"></span><a class="card-link" href="#calendrier">Calendrier${U.icon('chevR', 'sm')}</a></div>
+    return `<section class="card span-4 o1"><div class="card-h"><div><div class="eyebrow">Cette semaine</div><h2>${U.fmtShort(ws)} – ${U.fmtShort(U.addDays(ws, 6))}</h2></div><span class="spacer"></span><button class="card-link" data-act="reportOpen" title="Bilan de la semaine dernière">${U.icon('chart', 'sm')}Bilan</button><a class="card-link" href="#calendrier">Calendrier${U.icon('chevR', 'sm')}</a></div>
       <div class="week-strip">${w.days.map((d, i) => {
         const acts = D.actsOn(d).filter(a => a.status !== 'cancelled');
         const dots = [...new Set(acts.map(a => a.type))].slice(0, 3).map(tp => `<i style="--c:${D.ACT[tp].c};${acts.find(a => a.type === tp).status === 'planned' ? 'background:transparent;box-shadow:inset 0 0 0 1.5px var(--c)' : ''}"></i>`);
@@ -182,12 +183,16 @@ Pages.dashboard = {
     const prevKg = ms.filter(m => m.date).map(m => m.kg).pop() ?? prog.g.start;
     const badges = D.badgeState().filter(b => !b.on).sort((a, b) => b.pct - a.pct).slice(0, 3);
     let top;
-    if (next) {
+    if (D.isMaintain()) {
+      const wk = D.weekSummary(U.weekStart(U.today())), g = D.weeklyGoal();
+      top = `<div class="row between"><div><div class="xs faint">Activité de la semaine</div><div class="mid">${U.num(wk.minutes)}<span class="unit">/ ${g.min} min</span></div></div><div style="text-align:right"><div class="xs faint">séances</div><b class="mid acc-c">${wk.sessions}</b><span class="unit">/ ${g.sessions}</span></div></div>
+        <div style="margin:10px 0 4px">${UI.bar(wk.minutes / g.min, 'var(--c-walk)', 'thick')}</div><div class="xs faint">Toutes tes activités terminées comptent : marche, vélo, renforcement…</div>`;
+    } else if (next) {
       const left = Math.max(0, prog.ref - next.kg), pct = U.clamp((prevKg - prog.ref) / (prevKg - next.kg), 0, 1);
       top = `<div class="row between"><div><div class="xs faint">Prochain palier</div><div class="mid">${U.num(next.kg)}<span class="unit">kg</span></div></div><div style="text-align:right"><div class="xs faint">encore</div><b class="mid acc-c">${U.kg(left)}</b><span class="unit">kg</span></div></div>
         <div style="margin:10px 0 4px">${UI.bar(pct, 'var(--accent)', 'thick')}</div><div class="xs faint">Validé automatiquement quand ta moyenne sur 7 jours passe sous ${U.num(next.kg)} kg.</div>`;
     } else top = `<div class="celebrate" style="padding:0"><div class="md" style="width:56px;height:56px">${U.icon('flag')}</div><b>Tous les paliers sont franchis</b></div>`;
-    return `<section class="card span-4 o3 o-last clickable" data-act="goGoal"><div class="card-h"><div><div class="eyebrow">Objectifs</div><h2>La suite</h2></div><span class="spacer"></span><span class="card-link">Objectif${U.icon('chevR', 'sm')}</span></div>
+    return `<section class="card span-4 o3 o-last clickable" data-act="goGoal"><div class="card-h"><div><div class="eyebrow">Objectifs</div><h2>La suite</h2></div><span class="spacer"></span><span class="card-link">${D.isMaintain() ? 'Ma forme' : 'Objectif'}${U.icon('chevR', 'sm')}</span></div>
       ${top}
       <div class="list" style="margin-top:12px">${badges.map(b => `<div class="li"><span class="ic-badge sm" style="--c:var(--goal)">${U.icon(b.icon)}</span><span class="grow"><span class="t">${U.esc(b.label)}</span>${UI.bar(b.pct, 'var(--goal)')}</span><span class="end xs faint">${U.num(Math.min(b.v, b.goal), b.unit === 'kg' ? 1 : 0)}/${U.num(b.goal)}${b.unit ? ' ' + b.unit : ''}</span></div>`).join('')}</div>
     </section>`;

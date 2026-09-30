@@ -360,7 +360,7 @@ A.photoSave = async () => {
 
 /* ---------- Aliments : recherche, quantité au gramme, repas composé ---------- */
 F.food = (opts = {}) => {
-  const st = { date: opts.date || U.today(), slot: opts.slot || F.guessSlot(), q: '', sel: null, qty: null, tab: 'search', basket: [], mealName: '', asRecipe: false, editIdx: null };
+  const st = { date: opts.date || U.today(), slot: opts.slot || F.guessSlot(), q: '', sel: opts.sel || null, qty: opts.sel ? opts.sel.portion || 100 : null, tab: 'search', basket: [], mealName: '', asRecipe: false, editIdx: null };
   const m = UI.open({
     title: 'Ajouter au repas', sub: () => `${D.slotLabel(st.slot)} · ${U.relDay(st.date)}`, size: 'md',
     body: () => st.sel ? foodQtyBody(st) : foodSearchBody(st),
@@ -405,7 +405,7 @@ function basketPanel(st) {
 function foodSearchBody(st) {
   return `${slotSeg(st)}
     <div class="seg full"><button type="button" data-act="foodTab" data-t="search" class="${st.tab === 'search' ? 'on' : ''}">${U.icon('search', 'sm')} Rechercher</button><button type="button" data-act="foodTab" data-t="quick" class="${st.tab === 'quick' ? 'on' : ''}">${U.icon('bolt', 'sm')} Saisie rapide</button></div>
-    ${st.tab === 'search' ? `${basketPanel(st)}<div class="input-unit"><input class="input" id="fq" placeholder="pâtes crues, sauce tomate, poulet…" value="${U.esc(st.q)}" autocomplete="off" enterkeyhint="search"><em>${U.icon('search', 'sm')}</em></div><div class="food-results" id="fres">${foodResults(st)}</div>`
+    ${st.tab === 'search' ? `${basketPanel(st)}<div class="row" style="gap:8px"><div class="input-unit grow"><input class="input" id="fq" placeholder="pâtes crues, sauce tomate, poulet…" value="${U.esc(st.q)}" autocomplete="off" enterkeyhint="search"><em>${U.icon('search', 'sm')}</em></div><button type="button" class="btn scan-btn" data-act="scanOpen" title="Scanner un code-barres">${U.icon('camera', 'sm')}<span>Scanner</span></button></div><div class="food-results" id="fres">${foodResults(st)}</div>`
     : `<form id="fqf" class="stack"><label class="field"><span>Nom</span><input name="name" id="fq-name" placeholder="Ex. Plat du restaurant"></label>
       <div class="fields keep"><label class="field"><span>Calories</span><div class="input-unit"><input name="kcal" id="fq-kcal" inputmode="numeric" placeholder="650"><em>kcal</em></div></label>
       <label class="field"><span>Protéines</span><div class="input-unit"><input name="p" id="fq-p" inputmode="decimal" placeholder="35"><em>g</em></div></label>
@@ -510,11 +510,13 @@ A.foodQuickAdd = async () => {
   m.close(); UI.toast('Ajouté'); App.changed();
 };
 A.foodCreate = el => F.foodEdit(null, el.dataset.name || (UI.top().st ? UI.top().st.q : ''));
-F.foodEdit = (id, name = '') => {
-  const f = id ? D.food(id) : { name, kcal: '', p: '', c: '', f: '', portion: 100, portionLabel: '' };
+F.foodEdit = (id, name = '', pre = null) => {
+  const f = id ? D.food(id) : { name, kcal: '', p: '', c: '', f: '', portion: 100, portionLabel: '', ...(pre || {}) };
+  if (f.kcal == null) f.kcal = '';
   UI.open({
     title: id ? 'Modifier l\'aliment' : 'Nouvel aliment', sub: 'Valeurs pour 100 g (indiquées sur l\'étiquette)', size: 'sm',
-    body: `<form id="fef" class="stack"><label class="field"><span>Nom</span><input name="name" id="fe-name" value="${U.esc(f.name)}" placeholder="Ex. Wrap poulet maison" required></label>
+    onMount: m => { m.barcode = f.barcode || null; },
+    body: `<form id="fef" class="stack">${f.barcode ? `<div class="note">${U.icon('camera', 'sm')}<span>Code-barres <b>${U.esc(f.barcode)}</b> : ce produit sera reconnu au prochain scan${Cloud.user ? ', sur tous tes appareils' : ''}.</span></div>` : ''}<label class="field"><span>Nom</span><input name="name" id="fe-name" value="${U.esc(f.name)}" placeholder="Ex. Wrap poulet maison" required></label>
       <div class="fields keep"><label class="field"><span>Calories</span><div class="input-unit"><input name="kcal" id="fe-kcal" inputmode="decimal" value="${f.kcal}"><em>kcal</em></div></label>
       <label class="field"><span>Protéines</span><div class="input-unit"><input name="p" id="fe-p" inputmode="decimal" value="${f.p}"><em>g</em></div></label>
       <label class="field"><span>Glucides</span><div class="input-unit"><input name="c" id="fe-c" inputmode="decimal" value="${f.c}"><em>g</em></div></label>
@@ -532,6 +534,7 @@ A.foodEditSave = async el => {
   const o = UI.form(document.getElementById('fef'));
   const num = k => U.parseNum(document.getElementById(k).value);
   const rec = { name: o.name, kcal: num('fe-kcal'), p: num('fe-p') || 0, c: num('fe-c') || 0, f: num('fe-f') || 0, sug: num('fe-sug'), sat: num('fe-sat'), fib: num('fe-fib'), salt: num('fe-salt'), portion: num('fe-por') || 100, portionLabel: o.portionLabel };
+  const bc = UI.top().barcode; if (bc) rec.barcode = bc;
   if (!rec.name || rec.kcal == null) { UI.toast('Nom et calories sont nécessaires', { type: 'err' }); return; }
   const id = el.dataset.id;
   const orig = id ? D.food(id) : null;

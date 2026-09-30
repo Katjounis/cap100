@@ -179,6 +179,7 @@ Object.assign(Pages.nutrition, {
       const q = root.querySelector('#cq'); if (q) q.addEventListener('input', U.debounce(() => { this.cq = q.value; const g = root.querySelector('#cgrid'); const tmp = document.createElement('div'); tmp.innerHTML = Acc.tab(); g.innerHTML = tmp.querySelector('#cgrid').innerHTML; Charts.animateArcs(g); }, 150));
       if (Cloud.user && Date.now() - (this.cfetch || 0) > 60000) { this.cfetch = Date.now(); Cloud.fetchCommunity().catch(() => {}); }
     }
+    if (this.tab === 'courses') Acc.pollList();
     if (this.tab === 'courses') { const f = root.querySelector('#shop-add'); if (f) f.addEventListener('submit', e => { e.preventDefault(); A.shopAdd(); }); }
   },
 
@@ -285,12 +286,13 @@ Object.assign(Pages.nutrition, {
         <label class="field" style="margin-top:12px"><span>Mon enseigne principale</span><select class="input" data-change="setMainStore" id="main-store">${D.STORES.map(x => `<option value="${x.id}" ${x.id === main ? 'selected' : ''}>${x.name}</option>`).join('')}</select></label>
         ${multi ? `<div class="stack" style="gap:4px;margin-top:10px">${[...bk.byStore.entries()].sort((a, b) => b[1] - a[1]).map(([sid, v]) => `<div class="row between small"><span>${U.esc(D.store(sid).name)}</span><b class="tabnum">${U.eur(v)}</b></div>`).join('')}</div>` : ''}
         <p class="hint" style="margin:10px 0 0">Estimation en marque distributeur${bkAll.till !== bk.till ? `, liste complète ≈ ${U.eur0(bkAll.till)}` : ''}. Touche un article pour changer d'enseigne ou saisir ton prix réel.</p></section></div>`;
-    if (!items.length) return head + `<div class="card">${UI.empty('list', 'Liste vide', 'Planifie quelques repas puis génère la liste : les quantités sont additionnées et converties en quantités à acheter.', '<button class="btn primary sm" data-act="goPlanning">Ouvrir le planning</button>')}</div>`;
-    return head + `<div class="shop-cols">${D.AISLES.map(a => {
+    const share = Acc.shareCard();
+    if (!items.length) return share + head + `<div class="card">${UI.empty('list', 'Liste vide', 'Planifie quelques repas puis génère la liste : les quantités sont additionnées et converties en quantités à acheter.', '<button class="btn primary sm" data-act="goPlanning">Ouvrir le planning</button>')}</div>`;
+    return share + head + `<div class="shop-cols">${D.AISLES.map(a => {
       const arr = items.filter(i => (i.aisle || 'au') === a.id).sort((x, y) => (x.checked - y.checked) || x.name.localeCompare(y.name, 'fr'));
       if (!arr.length) return '';
       return `<section class="card shop-sec"><div class="card-h"><span class="ic-badge sm" style="--c:${a.id === 'pl' ? 'var(--ink-3)' : 'var(--c-walk)'}">${U.icon(a.icon)}</span><h3>${a.label}</h3><span class="spacer"></span><span class="small tabnum muted">${U.eur(D.basket(arr.filter(i => !i.checked)).till)}</span><span class="xs faint">${arr.filter(i => !i.checked).length}</span></div>
-        <div class="list">${arr.map(i => { const q = D.shopQty(i); return `<div class="shop-it ${i.checked ? 'done' : ''}"><button class="shop-ck" data-act="shopToggle" data-id="${U.esc(i.id)}" aria-label="${i.checked ? 'Décocher' : 'Cocher'} ${U.esc(i.name)}">${U.icon('check', 'sm')}</button><button class="grow shop-body" data-act="shopItem" data-id="${U.esc(i.id)}" style="min-width:0;text-align:left"><div class="row between" style="gap:8px"><span class="t">${U.esc(i.name)}</span>${q && q.main ? `<b class="tabnum small" style="white-space:nowrap">${q.main}</b>` : ''}</div><div class="row between xs" style="gap:8px"><span class="faint" style="min-width:0">${q && q.sub ? q.sub + (i.recipes && i.recipes.length ? ' · ' : '') : ''}${i.recipes ? U.esc(i.recipes.slice(0, 2).join(', ')) + (i.recipes.length > 2 ? '…' : '') : ''}</span>${(() => { const c = D.itemCost(i); const sid = D.itemStore(i); const chip = sid !== main ? `<span class="store-chip">${U.esc(D.store(sid).name)}</span>` : ''; return c.pantry ? '' : `<span style="white-space:nowrap">${chip}${c.known ? `<b class="tabnum price">${U.eur(c.till)}</b>` : '<span class="faint">prix ?</span>'}</span>`; })()}</div></button><button class="icon-btn sm" data-act="shopDel" data-id="${U.esc(i.id)}" aria-label="Retirer">${U.icon('x')}</button></div>`; }).join('')}</div></section>`;
+        <div class="list">${arr.map(i => { const q = D.shopQty(i); return `<div class="shop-it ${i.checked ? 'done' : ''}"><button class="shop-ck" data-act="shopToggle" data-id="${U.esc(i.id)}" aria-label="${i.checked ? 'Décocher' : 'Cocher'} ${U.esc(i.name)}">${U.icon('check', 'sm')}</button><button class="grow shop-body" data-act="shopItem" data-id="${U.esc(i.id)}" style="min-width:0;text-align:left"><div class="row between" style="gap:8px"><span class="t">${U.esc(i.name)}${i.by && Cloud.user && i.byU !== Cloud.user.uid ? `<span class="shop-by"> · ${U.esc(i.by)}</span>` : ''}</span>${q && q.main ? `<b class="tabnum small" style="white-space:nowrap">${q.main}</b>` : ''}</div><div class="row between xs" style="gap:8px"><span class="faint" style="min-width:0">${q && q.sub ? q.sub + (i.recipes && i.recipes.length ? ' · ' : '') : ''}${i.recipes ? U.esc(i.recipes.slice(0, 2).join(', ')) + (i.recipes.length > 2 ? '…' : '') : ''}</span>${(() => { const c = D.itemCost(i); const sid = D.itemStore(i); const chip = sid !== main ? `<span class="store-chip">${U.esc(D.store(sid).name)}</span>` : ''; return c.pantry ? '' : `<span style="white-space:nowrap">${chip}${c.known ? `<b class="tabnum price">${U.eur(c.till)}</b>` : '<span class="faint">prix ?</span>'}</span>`; })()}</div></button><button class="icon-btn sm" data-act="shopDel" data-id="${U.esc(i.id)}" aria-label="Retirer">${U.icon('x')}</button></div>`; }).join('')}</div></section>`;
     }).join('')}</div>`;
   }
 });
@@ -310,7 +312,7 @@ function recipeCard(r) {
     <div class="rc-top"><span class="rc-cat">${U.icon(cat.icon, 'sm')}${cat.label}</span><span class="grow"></span><span class="xs faint">${U.icon('clock', 'sm')} ${r.time || '?'} min</span>${r.community ? '' : `<button class="icon-btn sm rc-fav ${fav ? 'on' : ''}" data-act="recipeFav" data-id="${r.id}" aria-label="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${U.icon('star')}</button>`}</div>
     <h3>${U.esc(r.name)}</h3>
     <div class="rc-body">${macroDonut(m)}<div class="grow"><div class="rc-kcal"><b>${U.num(m.kcal)}</b> kcal <span class="faint xs">/ portion</span><span class="rc-eur">≈ ${U.eur(D.recipeCost(r).eur)}</span></div><div class="macro-line"><span class="m-p">P <b>${U.num(m.p)}</b></span><span class="m-c">G <b>${U.num(m.c)}</b></span><span class="m-f">L <b>${U.num(m.f)}</b></span></div></div></div>
-    <div class="rc-tags">${tags.slice(0, 3).map(t => `<span class="pill ${t === 'proteine' ? 'planned' : 'rest'}">${D.RECIPE_TAGS[t]}</span>`).join('')}${r.community ? `<span class="pill planned">${U.icon('smile', 'sm')}${r.mine ? 'Toi' : U.esc(r.author)}</span>` : r.base ? '' : `<span class="pill demo">Perso</span>${r.shared && Cloud.user ? '<span class="pill planned">Partagée</span>' : ''}`}</div>
+    <div class="rc-tags">${tags.slice(0, 3).map(t => `<span class="pill ${t === 'proteine' ? 'planned' : 'rest'}">${D.RECIPE_TAGS[t]}</span>`).join('')}${r.community ? `<span class="pill planned">${U.icon('smile', 'sm')}${r.mine ? 'Toi' : U.esc(r.author)}</span>${Acc.reactCounts(r)}` : r.base ? '' : `<span class="pill demo">Perso</span>${r.shared && Cloud.user ? '<span class="pill planned">Partagée</span>' : ''}`}</div>
     <div class="rc-actions"><button class="btn sm" data-act="recipePlan" data-id="${r.id}">${U.icon('calendar', 'sm')}Planifier</button><button class="btn sm primary" data-act="recipeLog" data-id="${r.id}">${U.icon('plus', 'sm')}Journal</button></div>
   </article>`;
 }
@@ -352,7 +354,8 @@ A.recipeOpen = (el, e) => {
         </div>
         <div class="stack"><div class="eyebrow">Préparation</div><ol class="steps">${(r.steps || []).map(s => `<li>${U.esc(s)}</li>`).join('')}</ol>
           ${r.tip ? `<div class="note">${U.icon('sparkle', 'sm')}<span>${U.esc(r.tip)}</span></div>` : ''}
-          <div class="rc-tags">${D.recipeTags(r).map(t => `<span class="pill ${t === 'proteine' ? 'planned' : 'rest'}">${D.RECIPE_TAGS[t]}</span>`).join('')}</div></div>
+          <div class="rc-tags">${D.recipeTags(r).map(t => `<span class="pill ${t === 'proteine' ? 'planned' : 'rest'}">${D.RECIPE_TAGS[t]}</span>`).join('')}</div>
+          ${r.community ? Acc.reactionsBlock(r) : ''}</div>
       </div>`;
     },
     footer: () => `${r.community ? '' : `<button class="btn ghost" data-act="recipeFav" data-id="${r.id}">${U.icon('star', 'sm')}${D.recipeFavs().has(r.id) ? 'Favori' : 'Favoris'}</button>`}${r.community ? `<button class="btn ghost" data-act="recipeEdit" data-id="${r.id}" data-copy="1">${U.icon('copy', 'sm')}Copier dans mes recettes</button>${r.mine ? `<button class="btn ghost" data-act="commUnshare" data-id="${r.id}">Retirer</button>` : Cloud.isAdmin() ? `<button class="btn ghost danger" data-act="commAdminDel" data-id="${r.id}">${U.icon('trash', 'sm')}</button>` : ''}` : r.base ? `<button class="btn ghost" data-act="recipeEdit" data-id="${r.id}" data-copy="1">${U.icon('copy', 'sm')}Dupliquer</button>` : `<button class="btn ghost" data-act="recipeEdit" data-id="${r.id}">${U.icon('edit', 'sm')}Modifier</button>${Cloud.user ? r.shared ? `<button class="btn ghost" data-act="commUnshare" data-id="${r.id}" title="Retirer de la communauté">${U.icon('smile', 'sm')}Partagée ✓</button>` : `<button class="btn ghost" data-act="commShare" data-id="${r.id}">${U.icon('smile', 'sm')}Partager</button>` : ''}`}<span class="spacer"></span><button class="btn" data-act="recipePlan" data-id="${r.id}" data-por="${st.por}">${U.icon('calendar', 'sm')}Planifier</button><button class="btn primary" data-act="recipeLog" data-id="${r.id}" data-por="${st.por}">${U.icon('plus', 'sm')}Ajouter au journal</button>`,
@@ -523,9 +526,12 @@ A.planShop = async () => {
   const fresh = D.shoppingFromPlan(from, to);
   if (!fresh.length) { UI.toast('Aucun repas prévu sur cette période : planifie d\'abord ta semaine', { type: 'info' }); p.tab = 'planning'; App.renderView(false); return; }
   const old = DB.all('shopping');
-  const checked = new Map(old.filter(i => i.auto).map(i => [i.id, i.checked]));
-  await DB.delMany('shopping', old.filter(i => i.auto).map(i => i.id));
-  await DB.putMany('shopping', fresh.map(i => ({ ...i, checked: !!checked.get(i.id) })));
+  // Liste partagée : chacun remplace seulement ses propres articles générés
+  const me = Cloud.user && Cloud.list() ? Cloud.user : null, tag = me ? '@' + me.uid.slice(0, 6) : '';
+  const mine = i => i.auto && (!me || !i.byU || i.byU === me.uid);
+  const checked = new Map(old.filter(mine).map(i => [i.id, i.checked]));
+  await DB.delMany('shopping', old.filter(mine).map(i => i.id));
+  await DB.putMany('shopping', fresh.map(i => ({ ...i, id: i.id + tag, checked: !!checked.get(i.id + tag), ...(me ? { by: me.name, byU: me.uid } : {}) })));
   await DB.setSetting('shopRange', { from, to });
   p.tab = 'courses'; UI.closeAll(); App.go('repas'); App.changed();
   UI.toast(`Liste prête : ${fresh.filter(i => !i.pantry).length} articles`);
@@ -534,7 +540,7 @@ A.shopToggle = async el => { const i = DB.get('shopping', el.dataset.id); await 
 A.shopDel = async el => { const old = DB.get('shopping', el.dataset.id); await DB.del('shopping', old.id); UI.toast(`${old.name} retiré`, { action: { label: 'Annuler', fn: async () => { await DB.put('shopping', old); App.changed(); } } }); App.changed(); };
 A.shopAdd = async () => {
   const n = document.getElementById('shop-name'); const name = n.value.trim(); if (!name) return;
-  await DB.put('shopping', { id: 'm|' + U.uid(), name, aisle: document.getElementById('shop-aisle').value, g: null, manual: true, checked: false });
+  await DB.put('shopping', { id: 'm|' + U.uid(), ...(Cloud.user && Cloud.list() ? { by: Cloud.user.name, byU: Cloud.user.uid } : {}), name, aisle: document.getElementById('shop-aisle').value, g: null, manual: true, checked: false });
   App.changed(); setTimeout(() => { const i = document.getElementById('shop-name'); if (i && !U.isMobile()) i.focus(); }, 30);
 };
 A.shopClearDone = async () => { const arr = DB.all('shopping').filter(i => i.checked); await DB.delMany('shopping', arr.map(i => i.id)); UI.toast(`${arr.length} articles retirés`, { action: { label: 'Annuler', fn: async () => { await DB.putMany('shopping', arr); App.changed(); } } }); App.changed(); };
