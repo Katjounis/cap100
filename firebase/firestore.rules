@@ -6,7 +6,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function isAdmin() { return signedIn() && request.auth.token.email == 'ADMIN_EMAIL'; }
+    function isAdmin() { return signedIn() && request.auth.token.email == 'chaux.samuel@gmail.com'; }
 
     // Données personnelles : chacun ne lit et n'écrit que les siennes.
     match /users/{uid}/items/{item} {
@@ -32,6 +32,51 @@ service cloud.firestore {
       allow create: if signedIn() && id.matches(request.auth.uid + '_.+') && valid();
       allow update: if signedIn() && resource.data.u == request.auth.uid && valid();
       allow delete: if signedIn() && (resource.data.u == request.auth.uid || isAdmin());
+    }
+
+    // Réactions aux recettes : un document par personne et par recette.
+    match /reactions/{id} {
+      function validReaction() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['c', 'u', 'a', 'liked', 'tested', 'note', 't'])
+          && d.u == request.auth.uid
+          && id == d.c + '__' + request.auth.uid
+          && d.a is string && d.a.size() <= 40
+          && d.liked is bool && d.tested is bool
+          && d.note is string && d.note.size() <= 280
+          && d.t == request.time
+          && exists(/databases/$(database)/documents/community/$(d.c));
+      }
+      allow read: if signedIn();
+      allow create: if signedIn() && validReaction();
+      allow update: if signedIn() && resource.data.u == request.auth.uid && validReaction();
+      allow delete: if signedIn() && (resource.data.u == request.auth.uid || isAdmin());
+    }
+
+    // Liste de courses partagée à deux : o = propriétaire, m = la personne invitée (une seule).
+    // Connaître le code (8 caractères aléatoires) revient à être invité.
+    match /lists/{code} {
+      function listKeys() { return request.resource.data.keys().hasOnly(['o', 'on', 'm', 'mn', 't']); }
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && code.size() == 8 && listKeys()
+        && request.resource.data.o == request.auth.uid && request.resource.data.m == '';
+      allow update: if signedIn() && listKeys() && request.resource.data.o == resource.data.o && request.resource.data.on == resource.data.on && (
+        // rejoindre une place libre
+        (resource.data.m == '' && request.resource.data.m == request.auth.uid && request.auth.uid != resource.data.o)
+        // quitter la liste
+        || (resource.data.m == request.auth.uid && request.resource.data.m == '')
+      );
+      allow delete: if signedIn() && resource.data.o == request.auth.uid;
+
+      match /items/{item} {
+        function member() { let l = get(/databases/$(database)/documents/lists/$(code)).data; return request.auth.uid == l.o || request.auth.uid == l.m; }
+        allow read, delete: if signedIn() && member();
+        allow create, update: if signedIn() && member()
+          && request.resource.data.keys().hasOnly(['k', 'j', 'd', 't'])
+          && request.resource.data.j is string && request.resource.data.j.size() < 20000
+          && request.resource.data.t == request.time;
+      }
     }
 
     // Tout le reste est fermé.
