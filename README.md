@@ -52,9 +52,12 @@ icons/                 Icônes de l'application
 js/util.js             Dates, formats, icônes
 js/db.js               Stockage IndexedDB + cache mémoire
 js/domain.js           Calculs : tendance du poids, estimations, badges, habitudes
+js/modes.js            Deux modes : « Perdre du poids » ou « Rester en forme » (zone de poids, 150 min d'activité par semaine)
 js/charts.js           Graphiques SVG interactifs
 js/ui.js               Fenêtres, feuilles mobiles, toasts, confirmations
 js/forms.js            Saisies : poids, repas, activité, journée du calendrier…
+js/scan.js             Scan de codes-barres (caméra) et recherche sur Open Food Facts
+js/vendor/zxing.min.js Lecteur de codes-barres ZXing (Apache 2.0), chargé seulement si le navigateur n'en a pas
 js/workout.js          Mode séance de renforcement
 js/recipes-data.js     Premières recettes, ingrédients, rayons et unités d'achat
 js/recipes-more.js     Grande base de recettes (223 au total : pâtes, carbonaras, bowls, plats, gratins, soupes…) — c'est ici qu'on ajoute des recettes
@@ -63,6 +66,7 @@ js/ciqual.js           Table Ciqual 2025 (Anses) : 3 277 aliments, nutriments po
 js/foods-db.js         Base d'aliments complète, recherche, calcul des nutriments à la quantité
 js/prices.js           Enseignes, prix de référence et budget des courses
 js/coach.js            Modèle de dépense, prévisions, charges suggérées, conseils
+js/report.js           Bilan de la semaine (point fort + un objectif pour la suivante)
 js/dashboard.js …      Une page par fichier (calendar, nutrition, training, body, habits, goal, stats, settings)
 js/demo.js             Données de démonstration (supprimables)
 js/cloud-config.js     Ta configuration Firebase (apiKey, projectId, adminEmail) — le seul fichier à remplir
@@ -123,3 +127,11 @@ Fonctionnement :
 - Limites de l'offre gratuite : 1 Go de données, 50 000 lectures et 20 000 écritures par jour, largement assez pour un groupe de proches.
 - Pour fermer les inscriptions une fois tout le monde inscrit : **Authentication → Paramètres → Actions des utilisateurs → décocher « Activer la création »**.
 - RGPD : les données saisies (poids, repas…) sont des données de santé. L'inscription demande un accord explicite, une page Confidentialité explique ce qui est stocké, et chacun peut exporter ses données et supprimer son compte (avec toutes ses données) depuis Réglages.
+
+## Modes, scan, bilan, communauté
+
+- **Deux modes** (Réglages → Objectif, ou au premier lancement) : « Perdre du poids » (poids visé, paliers, échéance) ou « Rester en forme » (poids de référence ± 2 kg, 150 minutes d'activité par semaine selon le repère de l'OMS, 2 séances de renforcement). En maintien, les calories visées sont égales à la dépense estimée, sans déficit ; la page Objectif devient « Ma forme ».
+- **Scan de codes-barres** : bouton Scanner dans « Ajouter au repas ». Les valeurs viennent d'[Open Food Facts](https://world.openfoodfacts.org) (base collaborative, licence ODbL) ; seul le code-barres est envoyé. Un produit scanné devient un aliment perso, reconnu ensuite sans connexion (et sur tes autres appareils avec un compte). Produit inconnu : tu saisis l'étiquette une fois.
+- **Bilan de la semaine** : du lundi au mercredi, l'accueil propose le bilan de la semaine précédente (activité, séances, poids, calories, protéines, habitudes), un point fort et un seul objectif. Toujours accessible via « Bilan » dans la carte Cette semaine.
+- **Réactions** : sur une recette de la Communauté, « J'aime », « J'ai testé » et un court avis (280 caractères). Tri « Les plus testées ».
+- **Liste de courses à deux** : Courses → « Partager ma liste » crée un code de 8 caractères à envoyer à **une seule personne**, qui le saisit dans « J'ai un code ». Vous voyez et cochez la même liste (actualisée toutes les 15 secondes quand elle est ouverte). Chacun peut quitter ; le propriétaire peut arrêter le partage. Tes autres données restent privées.
