@@ -1,0 +1,23 @@
+{
+  "name": "Cap 100 — Transformation physique",
+  "short_name": "Cap 100",
+  "description": "Poids, alimentation, séances, habitudes : ton centre de contrôle personnel. Données stockées uniquement sur l'appareil.",
+  "lang": "fr",
+  "start_url": "./#accueil",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0B0F17",
+  "theme_color": "#0B0F17",
+  "categories": ["health", "fitness", "lifestyle"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Accueil", "url": "./#accueil" },
+    { "name": "Alimentation", "url": "./#repas" },
+    { "name": "Sport", "url": "./#sport" }
+  ]
+}
