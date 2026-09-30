@@ -2,7 +2,8 @@
 
 Application web personnelle de transformation physique : poids, alimentation, séances, renforcement musculaire, habitudes, mensurations, photos et objectifs. Pensée pour accompagner le trajet de 130 kg vers environ 100 kg (novembre 2027), en préservant la musculature.
 
-- **100 % locale** : toutes les données sont stockées dans le navigateur (IndexedDB). Aucun compte, aucun serveur, aucune requête réseau avec tes données. Les polices sont hébergées avec l'application (pas d'appel à Google Fonts).
+- **Locale par défaut** : les données sont stockées dans le navigateur (IndexedDB). Les polices sont hébergées avec l'application (pas d'appel à Google Fonts).
+- **Comptes en option (gratuits)** : une fois ton projet Firebase branché, chacun s'inscrit avec prénom, e-mail et mot de passe ; ses données le suivent sur tous ses appareils et les recettes partagées apparaissent dans l'onglet Communauté. Les photos restent toujours sur l'appareil.
 - **Sans dépendance ni compilation** : HTML, CSS et JavaScript. Les graphiques sont dessinés en SVG.
 - **PWA** : installable sur téléphone, fonctionne hors connexion.
 
@@ -64,6 +65,10 @@ js/prices.js           Enseignes, prix de référence et budget des courses
 js/coach.js            Modèle de dépense, prévisions, charges suggérées, conseils
 js/dashboard.js …      Une page par fichier (calendar, nutrition, training, body, habits, goal, stats, settings)
 js/demo.js             Données de démonstration (supprimables)
+js/cloud-config.js     Ta configuration Firebase (apiKey, projectId, adminEmail) — le seul fichier à remplir
+js/cloud.js            Comptes, synchronisation et recettes partagées (API REST Firebase, sans bibliothèque)
+js/account.js          Écrans d'inscription/connexion, carte Compte, onglet Communauté
+firebase/firestore.rules  Règles de sécurité à coller dans la console Firebase
 js/app.js              Navigation, thème, raccourcis, démarrage
 ```
 
@@ -99,3 +104,22 @@ La bibliothèque contient 46 exercices au poids du corps, aux haltères, au kett
 - **Cru ou cuit** : pour les pâtes, le riz, la semoule ou les légumineuses, précise « cru » ou « cuit ». Pour des pâtes pesées sèches, l'application indique le poids une fois cuites (× 2,4 environ).
 - Les recettes indiquent les féculents cuits ; le poids sec ou cru à peser est affiché à côté de chaque ingrédient et la liste de courses convertit automatiquement.
 - Quelques produits absents de Ciqual (skyr, whey, cottage cheese, edamame, tortilla complète, lait de coco léger) utilisent des valeurs d'étiquettes courantes.
+
+## Comptes et communauté (Firebase, gratuit)
+
+Sans configuration, l'application fonctionne comme avant, sans compte. Pour activer les comptes :
+
+1. Sur [console.firebase.google.com](https://console.firebase.google.com), crée un projet (Google Analytics inutile). L'offre gratuite **Spark** suffit et ne demande pas de carte bancaire.
+2. **Authentication → Commencer → E-mail/Mot de passe → Activer.** Dans **Modèles**, passe la langue des e-mails en français.
+3. **Firestore Database → Créer une base de données**, emplacement en Europe (`eur3` ou `europe-west9` Paris), mode production.
+4. **Firestore → Règles** : colle le contenu de `firebase/firestore.rules`, remplace `ADMIN_EMAIL` par l'adresse de ton compte, **Publier**.
+5. **Paramètres du projet → Général → Vos applications → Web (</>)** : enregistre une application (pas besoin de Hosting) et copie `apiKey` et `projectId` dans `js/cloud-config.js`, avec ton adresse dans `adminEmail`.
+6. Envoie les fichiers sur GitHub et incrémente `VERSION` dans `sw.js`.
+
+Fonctionnement :
+- Chaque modification est mise en file sur l'appareil puis envoyée au serveur (hors connexion : envoyée au retour du réseau). À l'ouverture et toutes les 5 minutes, l'application récupère ce qui a changé ailleurs. En cas de conflit, la dernière modification envoyée l'emporte.
+- À la création du compte, les données déjà présentes sur l'appareil sont envoyées sur le compte.
+- Les règles de sécurité garantissent que chacun ne lit et n'écrit que ses propres données ; les recettes partagées sont lisibles par tous les inscrits et modifiables par leur auteur (et supprimables par l'administrateur).
+- Limites de l'offre gratuite : 1 Go de données, 50 000 lectures et 20 000 écritures par jour, largement assez pour un groupe de proches.
+- Pour fermer les inscriptions une fois tout le monde inscrit : **Authentication → Paramètres → Actions des utilisateurs → décocher « Activer la création »**.
+- RGPD : les données saisies (poids, repas…) sont des données de santé. L'inscription demande un accord explicite, une page Confidentialité explique ce qui est stocké, et chacun peut exporter ses données et supprimer son compte (avec toutes ses données) depuis Réglages.
