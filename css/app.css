@@ -1001,3 +1001,9 @@ button.card-link { background: none; border: 0; cursor: pointer; font: inherit; 
 .share-code { font: 700 26px var(--display); letter-spacing: .12em; padding: 6px 14px; border-radius: 12px; background: var(--surface-2); user-select: all; }
 .share-note { margin-bottom: 16px; }
 .shop-by { font-weight: 500; font-size: 12px; color: var(--ink-3); }
+
+.scan-saved { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--good-soft); font-size: 13px; line-height: 1.45; }
+.scan-saved > .i { color: var(--good); flex: none; margin-top: 2px; }
+.scan-saved .linkish { margin-left: auto; flex: none; }
+.ns { display: inline-block; min-width: 20px; text-align: center; border-radius: 5px; color: #fff; padding: 0 4px; }
+.ns-a { background: #038141; } .ns-b { background: #85bb2f; } .ns-c { background: #e6b800; } .ns-d { background: #ee8100; } .ns-e { background: #e63e11; }
